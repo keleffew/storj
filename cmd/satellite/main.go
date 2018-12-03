@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -15,7 +14,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/spf13/cobra"
 	"github.com/zeebo/errs"
-
 	"storj.io/storj/internal/fpath"
 	"storj.io/storj/pkg/auth/grpcauth"
 	"storj.io/storj/pkg/bwagreement"
@@ -32,6 +30,7 @@ import (
 	"storj.io/storj/pkg/provider"
 	"storj.io/storj/pkg/statdb"
 	"storj.io/storj/pkg/storj"
+	"storj.io/storj/pkg/utils"
 	"storj.io/storj/satellite/satellitedb"
 	"storj.io/storj/storage/redis"
 )
@@ -181,12 +180,12 @@ func cmdSetup(cmd *cobra.Command, args []string) (err error) {
 
 func cmdDiag(cmd *cobra.Command, args []string) (err error) {
 	// open the psql db
-	u, err := url.Parse(diagCfg.DatabaseURL)
+	driver, source, err := utils.SplitDBURL(diagCfg.DatabaseURL)
 	if err != nil {
 		return errs.New("Invalid Database URL: %+v", err)
 	}
 
-	dbm, err := dbmanager.NewDBManager(u.Scheme, u.Path)
+	dbm, err := dbmanager.NewDBManager(driver, source)
 	if err != nil {
 		return err
 	}
@@ -194,7 +193,7 @@ func cmdDiag(cmd *cobra.Command, args []string) (err error) {
 	//get all bandwidth aggrements rows already ordered
 	baRows, err := dbm.GetBandwidthAllocations(context.Background())
 	if err != nil {
-		fmt.Printf("error reading satellite database %v: %v\n", u.Path, err)
+		fmt.Printf("error reading satellite database %v: %v\n", source, err)
 		return err
 	}
 

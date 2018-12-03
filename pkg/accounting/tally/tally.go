@@ -9,6 +9,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"go.uber.org/zap"
+
 	"storj.io/storj/pkg/accounting"
 	dbx "storj.io/storj/pkg/accounting/dbx"
 	dbManager "storj.io/storj/pkg/bwagreement/database-manager"
@@ -98,16 +99,20 @@ func (t *tally) identifyActiveNodes(ctx context.Context) (err error) {
 				if err != nil {
 					return Error.Wrap(err)
 				}
-				pieces := pointer.Remote.RemotePieces
-				var nodeIDs storj.NodeIDList
-				for _, p := range pieces {
-					nodeIDs = append(nodeIDs, p.NodeId)
+				if pointer.Remote == nil {
+					t.logger.Warn("MISSING pointer.Remote")
+				} else {
+					pieces := pointer.Remote.RemotePieces
+					var nodeIDs storj.NodeIDList
+					for _, p := range pieces {
+						nodeIDs = append(nodeIDs, p.NodeId)
+					}
+					//online, err := t.onlineNodes(ctx, nodeIDs)
+					//if err != nil {
+					//	return Error.Wrap(err)
+					//}
+					//go t.tallyAtRestStorage(ctx, pointer, online, client)
 				}
-				online, err := t.onlineNodes(ctx, nodeIDs)
-				if err != nil {
-					return Error.Wrap(err)
-				}
-				go t.tallyAtRestStorage(ctx, pointer, online, client)
 			}
 			return nil
 		},

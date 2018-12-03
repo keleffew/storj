@@ -5,15 +5,14 @@ package bwagreement
 
 import (
 	"context"
-	"net/url"
 
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 	monkit "gopkg.in/spacemonkeygo/monkit.v2"
-
 	"storj.io/storj/pkg/bwagreement/database-manager"
 	"storj.io/storj/pkg/pb"
 	"storj.io/storj/pkg/provider"
+	"storj.io/storj/pkg/utils"
 )
 
 var (
@@ -33,12 +32,12 @@ func (c Config) Run(ctx context.Context, server *provider.Provider) (err error) 
 
 	zap.S().Debug("Starting Bandwidth Agreement Receiver...")
 
-	u, err := url.Parse(c.DatabaseURL)
+	driver, source, err := utils.SplitDBURL(c.DatabaseURL)
 	if err != nil {
 		return errs.New("Invalid Database URL: %+v", err)
 	}
 
-	dbm, err := dbmanager.NewDBManager(u.Scheme, u.Path)
+	dbm, err := dbmanager.NewDBManager(driver, source)
 	if err != nil {
 		return errs.New("Error starting initializing database for Bandwidth Agreement server on satellite: %+v", err)
 	}

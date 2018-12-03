@@ -4,9 +4,16 @@
 package satellitedb
 
 import (
+	"github.com/zeebo/errs"
+
 	"storj.io/storj/internal/migrate"
 	"storj.io/storj/pkg/satellite"
 	"storj.io/storj/pkg/satellite/satellitedb/dbx"
+)
+
+// Error is a standard error class for this package.
+var (
+	Error = errs.Class("satellite db error")
 )
 
 // Database contains access to different satellite databases
@@ -17,15 +24,10 @@ type Database struct {
 // New - constructor for DB
 func New(driver, source string) (satellite.DB, error) {
 	db, err := dbx.Open(driver, source)
-
 	if err != nil {
-		return nil, err
+		return nil, Error.Wrap(err)
 	}
-
-	database := &Database{
-		db: db,
-	}
-
+	database := &Database{db: db}
 	return database, nil
 }
 
@@ -51,10 +53,10 @@ func (db *Database) ProjectMembers() satellite.ProjectMembers {
 
 // CreateTables is a method for creating all tables for satellitedb
 func (db *Database) CreateTables() error {
-	return migrate.Create("satellitedb", db.db)
+	return Error.Wrap(migrate.Create("satellitedb", db.db))
 }
 
 // Close is used to close db connection
 func (db *Database) Close() error {
-	return db.db.Close()
+	return Error.Wrap(db.db.Close())
 }
