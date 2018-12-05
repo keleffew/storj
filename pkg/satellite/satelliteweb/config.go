@@ -8,7 +8,6 @@ import (
 
 	"github.com/graphql-go/graphql"
 	"go.uber.org/zap"
-
 	"storj.io/storj/pkg/provider"
 	"storj.io/storj/pkg/satellite"
 	"storj.io/storj/pkg/satellite/satelliteauth"
@@ -21,7 +20,7 @@ import (
 type Config struct {
 	GatewayConfig
 	SatelliteAddr string `help:"satellite main endpoint" default:""`
-	DatabaseURL   string `help:"" default:"sqlite3://$CONFDIR/satellitedb.db"`
+	DatabaseURL   string `help:"" default:"sqlite3://$CONFDIR/satellitedb.db?cache=shared"`
 }
 
 // Run implements Responsibility interface

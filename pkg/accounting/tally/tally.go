@@ -53,6 +53,7 @@ func newTally(logger *zap.Logger, db *dbx.DB, dbm *dbManager.DBManager, pointerd
 
 // Run the tally loop
 func (t *tally) Run(ctx context.Context) (err error) {
+	t.logger.Warn("In tally run")
 	defer mon.Task()(&ctx)(&err)
 
 	for {

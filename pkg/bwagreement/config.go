@@ -10,7 +10,6 @@ import (
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 	monkit "gopkg.in/spacemonkeygo/monkit.v2"
-
 	"storj.io/storj/pkg/bwagreement/database-manager"
 	"storj.io/storj/pkg/pb"
 	"storj.io/storj/pkg/provider"
@@ -23,7 +22,7 @@ var (
 // Config is a configuration struct that is everything you need to start an
 // agreement receiver responsibility
 type Config struct {
-	DatabaseURL string `help:"the database connection string to use" default:"sqlite3://$CONFDIR/bw.db"`
+	DatabaseURL string `help:"the database connection string to use" default:"sqlite3://$CONFDIR/bw.db?cache=shared"`
 }
 
 // Run implements the provider.Responsibility interface
