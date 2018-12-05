@@ -18,8 +18,6 @@ import (
 	"unicode"
 
 	"github.com/lib/pq"
-
-	"github.com/mattn/go-sqlite3"
 )
 
 // Prevent conditional imports from causing build failures
