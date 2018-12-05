@@ -15,7 +15,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/spf13/cobra"
 	"github.com/zeebo/errs"
-
 	"storj.io/storj/internal/fpath"
 	"storj.io/storj/pkg/auth/grpcauth"
 	"storj.io/storj/pkg/bwagreement"

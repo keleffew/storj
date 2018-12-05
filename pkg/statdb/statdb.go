@@ -13,7 +13,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	monkit "gopkg.in/spacemonkeygo/monkit.v2"
-
 	"storj.io/storj/internal/migrate"
 	dbx "storj.io/storj/pkg/statdb/dbx"
 	pb "storj.io/storj/pkg/statdb/proto"
@@ -36,12 +35,12 @@ type StatDB struct {
 func NewStatDB(driver, source string, log *zap.Logger) (*StatDB, error) {
 	db, err := dbx.Open(driver, source)
 	if err != nil {
-		return nil, err
+		return nil, Error.Wrap(err)
 	}
 
 	err = migrate.Create("statdb", db)
 	if err != nil {
-		return nil, err
+		return nil, Error.Wrap(err)
 	}
 
 	return &StatDB{
@@ -93,7 +92,7 @@ func (s *StatDB) Create(ctx context.Context, createReq *pb.CreateRequest) (resp 
 		dbx.Node_UptimeRatio(uptimeRatio),
 	)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, Error.Wrap(status.Errorf(codes.Internal, err.Error()))
 	}
 
 	nodeStats := &pb.NodeStats{
@@ -114,7 +113,7 @@ func (s *StatDB) Get(ctx context.Context, getReq *pb.GetRequest) (resp *pb.GetRe
 
 	dbNode, err := s.DB.Get_Node_By_Id(ctx, dbx.Node_Id(getReq.NodeId.Bytes()))
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, Error.Wrap(status.Errorf(codes.Internal, err.Error()))
 	}
 
 	nodeStats := &pb.NodeStats{
@@ -142,7 +141,7 @@ func (s *StatDB) FindInvalidNodes(ctx context.Context, getReq *pb.FindInvalidNod
 	rows, err := s.findInvalidNodesQuery(nodeIds, maxAuditSuccess, maxUptime)
 
 	if err != nil {
-		return nil, err
+		return nil, Error.Wrap(err)
 	}
 	defer func() {
 		err = rows.Close()
@@ -155,11 +154,11 @@ func (s *StatDB) FindInvalidNodes(ctx context.Context, getReq *pb.FindInvalidNod
 		node := &dbx.Node{}
 		err = rows.Scan(&node.Id, &node.TotalAuditCount, &node.TotalUptimeCount, &node.AuditSuccessRatio, &node.UptimeRatio)
 		if err != nil {
-			return nil, err
+			return nil, Error.Wrap(err)
 		}
 		id, err := storj.NodeIDFromBytes(node.Id)
 		if err != nil {
-			return nil, err
+			return nil, Error.Wrap(err)
 		}
 		invalidIds = append(invalidIds, id)
 	}
@@ -188,7 +187,7 @@ func (s *StatDB) findInvalidNodesQuery(nodeIds storj.NodeIDList, auditSuccess, u
 			OR nodes.uptime_ratio < ?
 		)`, args...)
 
-	return rows, err
+	return rows, Error.Wrap(err)
 }
 
 // Update a single storagenode's stats in the db
@@ -203,12 +202,12 @@ func (s *StatDB) Update(ctx context.Context, updateReq *pb.UpdateRequest) (resp 
 
 	_, err = s.CreateEntryIfNotExists(ctx, createIfReq)
 	if err != nil {
-		return nil, err
+		return nil, Error.Wrap(err)
 	}
 
 	dbNode, err := s.DB.Get_Node_By_Id(ctx, dbx.Node_Id(node.Id.Bytes()))
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, Error.Wrap(status.Errorf(codes.Internal, err.Error()))
 	}
 
 	auditSuccessCount := dbNode.AuditSuccessCount
@@ -245,7 +244,7 @@ func (s *StatDB) Update(ctx context.Context, updateReq *pb.UpdateRequest) (resp 
 
 	dbNode, err = s.DB.Update_Node_By_Id(ctx, dbx.Node_Id(node.Id.Bytes()), updateFields)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, Error.Wrap(status.Errorf(codes.Internal, err.Error()))
 	}
 
 	nodeStats := &pb.NodeStats{
@@ -268,7 +267,7 @@ func (s *StatDB) UpdateUptime(ctx context.Context, updateReq *pb.UpdateUptimeReq
 
 	dbNode, err := s.DB.Get_Node_By_Id(ctx, dbx.Node_Id(node.Id.Bytes()))
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, Error.Wrap(status.Errorf(codes.Internal, err.Error()))
 	}
 
 	uptimeSuccessCount := dbNode.UptimeSuccessCount
@@ -289,7 +288,7 @@ func (s *StatDB) UpdateUptime(ctx context.Context, updateReq *pb.UpdateUptimeReq
 
 	dbNode, err = s.DB.Update_Node_By_Id(ctx, dbx.Node_Id(node.Id.Bytes()), updateFields)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, Error.Wrap(status.Errorf(codes.Internal, err.Error()))
 	}
 
 	nodeStats := &pb.NodeStats{
@@ -312,7 +311,7 @@ func (s *StatDB) UpdateAuditSuccess(ctx context.Context, updateReq *pb.UpdateAud
 
 	dbNode, err := s.DB.Get_Node_By_Id(ctx, dbx.Node_Id(node.Id.Bytes()))
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, Error.Wrap(status.Errorf(codes.Internal, err.Error()))
 	}
 
 	auditSuccessCount := dbNode.AuditSuccessCount
@@ -333,7 +332,7 @@ func (s *StatDB) UpdateAuditSuccess(ctx context.Context, updateReq *pb.UpdateAud
 
 	dbNode, err = s.DB.Update_Node_By_Id(ctx, dbx.Node_Id(node.Id.Bytes()), updateFields)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, Error.Wrap(status.Errorf(codes.Internal, err.Error()))
 	}
 
 	nodeStats := &pb.NodeStats{
@@ -390,7 +389,7 @@ func (s *StatDB) CreateEntryIfNotExists(ctx context.Context, createIfReq *pb.Cre
 		}
 		res, err := s.Create(ctx, createReq)
 		if err != nil {
-			return nil, err
+			return nil, Error.Wrap(err)
 		}
 		createEntryIfNotExistsRes := &pb.CreateEntryIfNotExistsResponse{
 			Stats: res.Stats,
@@ -398,7 +397,7 @@ func (s *StatDB) CreateEntryIfNotExists(ctx context.Context, createIfReq *pb.Cre
 		return createEntryIfNotExistsRes, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, Error.Wrap(err)
 	}
 	createEntryIfNotExistsRes := &pb.CreateEntryIfNotExistsResponse{
 		Stats: getRes.Stats,
@@ -417,13 +416,13 @@ func updateRatioVars(newStatus bool, successCount, totalCount int64) (int64, int
 
 func checkRatioVars(successCount, totalCount int64) (ratio float64, err error) {
 	if successCount < 0 {
-		return 0, errs.New("success count less than 0")
+		return 0, Error.Wrap(errs.New("success count less than 0"))
 	}
 	if totalCount < 0 {
-		return 0, errs.New("total count less than 0")
+		return 0, Error.Wrap(errs.New("total count less than 0"))
 	}
 	if successCount > totalCount {
-		return 0, errs.New("success count greater than total count")
+		return 0, Error.Wrap(errs.New("success count greater than total count"))
 	}
 
 	ratio = float64(successCount) / float64(totalCount)

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zeebo/errs"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	monkit "gopkg.in/spacemonkeygo/monkit.v2"
@@ -16,8 +17,10 @@ import (
 	"storj.io/storj/pkg/pb"
 )
 
+// Error is a standard error class for this package.
 var (
-	mon = monkit.Package()
+	Error = errs.Class("bwagreement db error")
+	mon   = monkit.Package()
 )
 
 // DBManager is an implementation of the database access interface
@@ -30,16 +33,13 @@ type DBManager struct {
 func NewDBManager(driver, source string) (*DBManager, error) {
 	db, err := dbx.Open(driver, source)
 	if err != nil {
-		return nil, err
+		return nil, Error.Wrap(err)
 	}
-
 	err = migrate.Create("bwagreement", db)
 	if err != nil {
-		return nil, err
+		return nil, Error.Wrap(err)
 	}
-	return &DBManager{
-		DB: db,
-	}, nil
+	return &DBManager{DB: db}, nil
 }
 
 func (dbm *DBManager) locked() func() {
@@ -61,9 +61,8 @@ func (dbm *DBManager) Create(ctx context.Context, createBwAgreement *pb.RenterBa
 		dbx.Bwagreement_Data(data),
 	)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, Error.Wrap(status.Errorf(codes.Internal, err.Error()))
 	}
-
 	return bwagreement, nil
 }
 
@@ -72,7 +71,7 @@ func (dbm *DBManager) GetBandwidthAllocations(ctx context.Context) (rows []*dbx.
 	defer mon.Task()(&ctx)(&err)
 	defer dbm.locked()()
 	rows, err = dbm.DB.All_Bwagreement(ctx)
-	return rows, err
+	return rows, Error.Wrap(err)
 }
 
 // GetBandwidthAllocationsSince all bandwidth agreements created since a time
