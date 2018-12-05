@@ -23,11 +23,11 @@ func init() {
 
 // NewDb - constructor for DB
 func NewDb(databaseURL string) (*dbx.DB, error) {
-	dbURL, err := utils.ParseURL(databaseURL)
+	driver, source, err := utils.SplitURL(databaseURL)
 	if err != nil {
 		return nil, Error.Wrap(err)
 	}
-	db, err := dbx.Open(dbURL.Scheme, dbURL.Path)
+	db, err := dbx.Open(driver, source)
 	if err != nil {
 		return nil, Error.Wrap(err)
 	}

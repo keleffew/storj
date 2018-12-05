@@ -11,7 +11,6 @@ import (
 	"github.com/alicebob/miniredis"
 	"github.com/spf13/cobra"
 	"github.com/zeebo/errs"
-
 	"storj.io/storj/pkg/accounting/tally"
 	"storj.io/storj/pkg/audit"
 	"storj.io/storj/pkg/auth/grpcauth"
@@ -50,7 +49,7 @@ type Satellite struct {
 	StatDB      statdb.Config
 	BwAgreement bwagreement.Config
 	Web         satelliteweb.Config
-	Database    string `help:"the master database connection string" default:"sqlite3://$CONFDIR/master.db"`
+	Database    string `help:"the master database connection string" default:"sqlite3://$CONFDIR/master.db?cache=shared"`
 	Tally       tally.Config
 }
 

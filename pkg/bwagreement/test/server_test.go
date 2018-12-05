@@ -17,10 +17,18 @@ var (
 )
 
 func TestTwoSqliteFileDbManagers(t *testing.T) {
+	dbx1, err := dbManager.NewDBManager("sqlite3", "file:accounting.db")
+	assert.NoError(t, err)
+	_, err = dbManager.NewDBManager("sqlite3", "file:accounting.db")
+	assert.Error(t, err)
+	assert.NoError(t, dbx1.DB.Close())
+}
+
+func TestTwoSqliteFileSharedDbManagers(t *testing.T) {
 	dbx1, err := dbManager.NewDBManager("sqlite3", "file:accounting.db?cache=shared")
 	assert.NoError(t, err)
 	dbx2, err := dbManager.NewDBManager("sqlite3", "file:accounting.db?cache=shared")
-	assert.Error(t, err)
+	assert.NoError(t, err)
 	assert.NoError(t, dbx1.DB.Close())
 	assert.NoError(t, dbx2.DB.Close())
 }

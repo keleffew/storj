@@ -5,7 +5,6 @@ package tally
 
 import (
 	"context"
-	"net/url"
 	"time"
 
 	"go.uber.org/zap"
@@ -15,6 +14,7 @@ import (
 	"storj.io/storj/pkg/overlay"
 	"storj.io/storj/pkg/pointerdb"
 	"storj.io/storj/pkg/provider"
+	"storj.io/storj/pkg/utils"
 )
 
 // Config contains configurable values for tally
@@ -32,13 +32,12 @@ func (c Config) initialize(ctx context.Context) (Tally, error) {
 	if err != nil {
 		return nil, Error.Wrap(err)
 	}
-	u, err := url.Parse(c.DatabaseURL)
+	driver, source, err := utils.SplitURL(c.DatabaseURL)
 	if err != nil {
 		return nil, err
 	}
-	zap.L().Warn("Pre tally NewDBManager")
-	zap.L().Warn(u.Path)
-	dbx, err := dbManager.NewDBManager(u.Scheme, u.Path)
+	zap.L().Warn("Pre tally NewDBManager : " + c.DatabaseURL)
+	dbx, err := dbManager.NewDBManager(driver, source)
 	if err != nil {
 		return nil, err
 	}

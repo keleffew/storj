@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -31,32 +30,6 @@ func SplitURL(s string) (string, string, error) {
 		return "", "", fmt.Errorf("Could not parse DB URL %s", s)
 	}
 	return parts[0], parts[1], nil
-}
-
-// ParseURL extracts database parameters from a string as a URL
-//   bolt://storj.db
-//   bolt://C:\storj.db
-//   redis://hostname
-func ParseURL(s string) (*url.URL, error) {
-	if strings.HasPrefix(s, "bolt://") {
-		return &url.URL{
-			Scheme: "bolt",
-			Path:   strings.TrimPrefix(s, "bolt://"),
-		}, nil
-	}
-	if strings.HasPrefix(s, "sqlite3://") {
-		return &url.URL{
-			Scheme: "sqlite3",
-			Path:   strings.TrimPrefix(s, "sqlite3://"),
-		}, nil
-	}
-	if strings.HasPrefix(s, "postgres://") {
-		return &url.URL{
-			Scheme: "postgres",
-			Path:   s,
-		}, nil
-	}
-	return url.Parse(s)
 }
 
 // CombineErrors combines multiple errors to a single error

@@ -16,19 +16,14 @@ type DB struct {
 
 // NewDB creates instance of database (supports: postgres, sqlite3)
 func NewDB(databaseURL string) (*DB, error) {
-	dbURL, err := utils.ParseURL(databaseURL)
+	driver, source, err := utils.SplitURL(databaseURL)
 	if err != nil {
 		return nil, err
 	}
-	source := databaseURL
-	if dbURL.Scheme == "sqlite3" {
-		source = dbURL.Path
-	}
-	db, err := dbx.Open(dbURL.Scheme, source)
+	db, err := dbx.Open(driver, source)
 	if err != nil {
 		return nil, err
 	}
-
 	return &DB{db: db}, nil
 }
 

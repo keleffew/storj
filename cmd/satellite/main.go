@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -31,6 +30,7 @@ import (
 	"storj.io/storj/pkg/provider"
 	"storj.io/storj/pkg/statdb"
 	"storj.io/storj/pkg/storj"
+	"storj.io/storj/pkg/utils"
 	"storj.io/storj/satellite/satellitedb"
 	"storj.io/storj/storage/redis"
 )
@@ -72,7 +72,7 @@ var (
 
 		// Audit audit.Config
 		BwAgreement bwagreement.Config
-		Database    string `help:"the master database connection string" default:"sqlite3://$CONFDIR/master.db"`
+		Database    string `help:"the master database connection string" default:"sqlite3://$CONFDIR/master.db?cache=shared"`
 	}
 	setupCfg struct {
 		BasePath  string `default:"$CONFDIR" help:"base path for setup"`
@@ -81,7 +81,7 @@ var (
 		Overwrite bool `default:"false" help:"whether to overwrite pre-existing configuration files"`
 	}
 	diagCfg struct {
-		DatabaseURL string `help:"the database connection string to use" default:"sqlite3://$CONFDIR/bw.db"`
+		DatabaseURL string `help:"the database connection string to use" default:"sqlite3://$CONFDIR/bw.db?cache=shared"`
 	}
 	qdiagCfg struct {
 		DatabaseURL string `help:"the database connection string to use" default:"redis://127.0.0.1:6378?db=1&password=abc123"`
@@ -180,12 +180,12 @@ func cmdSetup(cmd *cobra.Command, args []string) (err error) {
 
 func cmdDiag(cmd *cobra.Command, args []string) (err error) {
 	// open the psql db
-	u, err := url.Parse(diagCfg.DatabaseURL)
+	driver, source, err := utils.SplitURL(diagCfg.DatabaseURL)
 	if err != nil {
 		return errs.New("Invalid Database URL: %+v", err)
 	}
 
-	dbm, err := dbmanager.NewDBManager(u.Scheme, u.Path)
+	dbm, err := dbmanager.NewDBManager(driver, source)
 	if err != nil {
 		return err
 	}
@@ -193,7 +193,7 @@ func cmdDiag(cmd *cobra.Command, args []string) (err error) {
 	//get all bandwidth aggrements rows already ordered
 	baRows, err := dbm.GetBandwidthAllocations(context.Background())
 	if err != nil {
-		fmt.Printf("error reading satellite database %v: %v\n", u.Path, err)
+		fmt.Printf("error reading satellite database %v: %v\n", source, err)
 		return err
 	}
 
