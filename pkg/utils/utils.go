@@ -6,6 +6,7 @@ package utils
 import (
 	"bytes"
 	"encoding/gob"
+	"fmt"
 	"net/url"
 	"strings"
 	"time"
@@ -20,6 +21,16 @@ func GetBytes(key interface{}) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// SplitURL returns the schema and non-scheme portions of a URL
+// consider https://github.com/xo/dburl if this ends up lacking
+func SplitURL(s string) (string, string, error) {
+	parts := strings.SplitN(s, "://", 2)
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("Could not parse DB URL %s", s)
+	}
+	return parts[0], parts[1], nil
 }
 
 // ParseURL extracts database parameters from a string as a URL
