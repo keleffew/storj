@@ -18,7 +18,6 @@ import (
 	"storj.io/storj/pkg/node"
 	"storj.io/storj/pkg/pb"
 	"storj.io/storj/pkg/pointerdb"
-	"storj.io/storj/pkg/provider"
 	"storj.io/storj/pkg/storj"
 	"storj.io/storj/storage"
 )
@@ -75,16 +74,16 @@ func (t *tally) Run(ctx context.Context) (err error) {
 func (t *tally) identifyActiveNodes(ctx context.Context) (err error) {
 	defer mon.Task()(&ctx)(&err)
 
-	rt, err := t.kademlia.GetRoutingTable(ctx)
-	if err != nil {
-		return Error.Wrap(err)
-	}
-	self := rt.Local()
-	identity := &provider.FullIdentity{} //do i need anything in here?
-	client, err := node.NewNodeClient(identity, self, t.kademlia)
-	if err != nil {
-		return Error.Wrap(err)
-	}
+	// rt, err := t.kademlia.GetRoutingTable(ctx)
+	// if err != nil {
+	// 	return Error.Wrap(err)
+	// }
+	//self := rt.Local()
+	//identity := &provider.FullIdentity{} //do i need anything in here?
+	// client, err := node.NewNodeClient(identity, self, t.kademlia)
+	// if err != nil {
+	// 	return Error.Wrap(err)
+	// }
 
 	err = t.pointerdb.Iterate(ctx, &pb.IterateRequest{Recurse: true},
 		func(it storage.Iterator) error {
