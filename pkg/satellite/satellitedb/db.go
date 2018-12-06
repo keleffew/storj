@@ -5,7 +5,7 @@ package satellitedb
 
 import (
 	"github.com/zeebo/errs"
-	monkit "gopkg.in/spacemonkeygo/monkit.v2"
+
 	"storj.io/storj/internal/migrate"
 	"storj.io/storj/pkg/satellite"
 	"storj.io/storj/pkg/satellite/satellitedb/dbx"
@@ -14,7 +14,6 @@ import (
 // Error is a standard error class for this package.
 var (
 	Error = errs.Class("satellite db error")
-	mon   = monkit.Package()
 )
 
 // Database contains access to different satellite databases
