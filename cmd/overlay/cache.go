@@ -48,7 +48,7 @@ func (c cacheConfig) open() (*overlay.Cache, error) {
 
 	// add logger
 	db = storelogger.New(zap.L(), db)
-	sdb, err = statdb.NewStatDB(driver, source, zap.L())
+	sdb, err = statdb.NewStatDB("postgres", source, zap.L()) //todo:  unhardcode this
 	if err != nil {
 		return nil, Error.New("statdb error: %s", err)
 	}
