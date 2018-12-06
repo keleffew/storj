@@ -15,10 +15,8 @@ import (
 	dbManager "storj.io/storj/pkg/bwagreement/database-manager"
 	bwDbx "storj.io/storj/pkg/bwagreement/database-manager/dbx"
 	"storj.io/storj/pkg/kademlia"
-	"storj.io/storj/pkg/node"
 	"storj.io/storj/pkg/pb"
 	"storj.io/storj/pkg/pointerdb"
-	"storj.io/storj/pkg/storj"
 	"storj.io/storj/storage"
 )
 
@@ -100,12 +98,12 @@ func (t *tally) identifyActiveNodes(ctx context.Context) (err error) {
 				}
 				if pointer.Remote == nil {
 					t.logger.Warn("MISSING pointer.Remote")
-				} else {
-					pieces := pointer.Remote.RemotePieces
-					var nodeIDs storj.NodeIDList
-					for _, p := range pieces {
-						nodeIDs = append(nodeIDs, p.NodeId)
-					}
+					// } else {
+					// 	pieces := pointer.Remote.RemotePieces
+					// 	var nodeIDs storj.NodeIDList
+					// 	for _, p := range pieces {
+					// 		nodeIDs = append(nodeIDs, p.NodeId)
+					// 	}
 					//online, err := t.onlineNodes(ctx, nodeIDs)
 					//if err != nil {
 					//	return Error.Wrap(err)
@@ -119,58 +117,58 @@ func (t *tally) identifyActiveNodes(ctx context.Context) (err error) {
 	return err
 }
 
-func (t *tally) onlineNodes(ctx context.Context, nodeIDs storj.NodeIDList) (online []*pb.Node, err error) {
-	responses, err := t.overlay.BulkLookup(ctx, pb.NodeIDsToLookupRequests(nodeIDs))
-	if err != nil {
-		return []*pb.Node{}, err
-	}
-	nodes := pb.LookupResponsesToNodes(responses)
-	for _, n := range nodes {
-		if n != nil {
-			online = append(online, n)
-		}
-	}
-	return online, nil
-}
+// func (t *tally) onlineNodes(ctx context.Context, nodeIDs storj.NodeIDList) (online []*pb.Node, err error) {
+// 	responses, err := t.overlay.BulkLookup(ctx, pb.NodeIDsToLookupRequests(nodeIDs))
+// 	if err != nil {
+// 		return []*pb.Node{}, err
+// 	}
+// 	nodes := pb.LookupResponsesToNodes(responses)
+// 	for _, n := range nodes {
+// 		if n != nil {
+// 			online = append(online, n)
+// 		}
+// 	}
+// 	return online, nil
+// }
 
-func (t *tally) tallyAtRestStorage(ctx context.Context, pointer *pb.Pointer, nodes []*pb.Node, client node.Client) {
-	segmentSize := pointer.GetSegmentSize()
-	minReq := pointer.Remote.Redundancy.GetMinReq()
-	if minReq <= 0 {
-		zap.L().Error("minReq must be an int greater than 0")
-		return
-	}
-	pieceSize := segmentSize / int64(minReq)
-	for _, n := range nodes {
-		nodeAvail := true
-		var err error
-		ok := t.needToContact(n.Id)
-		if ok {
-			nodeAvail, err = client.Ping(ctx, *n)
-			if err != nil {
-				zap.L().Error("ping failed")
-				continue
-			}
-		}
-		if nodeAvail {
-			err := t.updateGranularTable(n.Id, pieceSize)
-			if err != nil {
-				zap.L().Error("update failed")
-			}
-		}
-	}
-}
+// func (t *tally) tallyAtRestStorage(ctx context.Context, pointer *pb.Pointer, nodes []*pb.Node, client node.Client) {
+// 	segmentSize := pointer.GetSegmentSize()
+// 	minReq := pointer.Remote.Redundancy.GetMinReq()
+// 	if minReq <= 0 {
+// 		zap.L().Error("minReq must be an int greater than 0")
+// 		return
+// 	}
+// 	pieceSize := segmentSize / int64(minReq)
+// 	for _, n := range nodes {
+// 		nodeAvail := true
+// 		var err error
+// 		ok := t.needToContact(n.Id)
+// 		if ok {
+// 			nodeAvail, err = client.Ping(ctx, *n)
+// 			if err != nil {
+// 				zap.L().Error("ping failed")
+// 				continue
+// 			}
+// 		}
+// 		if nodeAvail {
+// 			err := t.updateGranularTable(n.Id, pieceSize)
+// 			if err != nil {
+// 				zap.L().Error("update failed")
+// 			}
+// 		}
+// 	}
+// }
 
-func (t *tally) needToContact(id storj.NodeID) bool {
-	//TODO
-	//check db if node was updated within the last time period
-	return true
-}
+// func (t *tally) needToContact(id storj.NodeID) bool {
+// 	//TODO
+// 	//check db if node was updated within the last time period
+// 	return true
+// }
 
-func (t *tally) updateGranularTable(id storj.NodeID, pieceSize int64) error {
-	//TODO
-	return nil
-}
+// func (t *tally) updateGranularTable(id storj.NodeID, pieceSize int64) error {
+// 	//TODO
+// 	return nil
+// }
 
 // Query bandwidth allocation database, selecting all new contracts since the last collection run time.
 // Grouping by storage node ID and adding total of bandwidth to granular data table.
