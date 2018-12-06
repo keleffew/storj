@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"go.uber.org/zap"
+
 	"storj.io/storj/pkg/overlay"
 	"storj.io/storj/pkg/pb"
 	"storj.io/storj/pkg/provider"
@@ -43,7 +44,7 @@ func newKeyValueStore(dbURLString string) (db storage.KeyValueStore, err error) 
 	if driver == "bolt" {
 		db, err = boltdb.New(source, BoltPointerBucket)
 	} else if driver == "postgresql" || driver == "postgres" {
-		db, err = postgreskv.New(dbURLString)
+		db, err = postgreskv.New(source)
 	} else {
 		err = Error.New("unsupported db scheme: %s", driver)
 	}

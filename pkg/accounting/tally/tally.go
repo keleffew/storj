@@ -100,21 +100,18 @@ func (t *tally) identifyActiveNodes(ctx context.Context) (err error) {
 					return Error.Wrap(err)
 				}
 				if pointer.Remote == nil {
-					t.logger.Warn("MISSING pointer.Remote in tally")
+					t.logger.Warn("MISSING pointer.Remote")
 				} else {
-					if pointer.Remote.RemotePieces == nil {
-						t.logger.Warn("MISSING pointer.Remote.RemotePieces in tally")
-					}
 					pieces := pointer.Remote.RemotePieces
 					var nodeIDs storj.NodeIDList
 					for _, p := range pieces {
 						nodeIDs = append(nodeIDs, p.NodeId)
 					}
-					online, err := t.onlineNodes(ctx, nodeIDs)
-					if err != nil {
-						return Error.Wrap(err)
-					}
-					go t.tallyAtRestStorage(ctx, pointer, online, client)
+					//online, err := t.onlineNodes(ctx, nodeIDs)
+					//if err != nil {
+					//	return Error.Wrap(err)
+					//}
+					//go t.tallyAtRestStorage(ctx, pointer, online, client)
 				}
 			}
 			return nil
