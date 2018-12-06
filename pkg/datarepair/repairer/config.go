@@ -12,7 +12,6 @@ import (
 
 	"storj.io/storj/pkg/datarepair/queue"
 	"storj.io/storj/pkg/eestream"
-	"storj.io/storj/pkg/miniogw"
 	"storj.io/storj/pkg/overlay"
 	"storj.io/storj/pkg/pointerdb/pdbclient"
 	"storj.io/storj/pkg/provider"
@@ -23,11 +22,26 @@ import (
 
 // Config contains configurable values for repairer
 type Config struct {
-	QueueAddress string        `help:"data repair queue address" default:"redis://127.0.0.1:6378?db=1&password=abc123"`
-	MaxRepair    int           `help:"maximum segments that can be repaired concurrently" default:"100"`
-	Interval     time.Duration `help:"how frequently checker should audit segments" default:"3600s"`
-	miniogw.ClientConfig
-	miniogw.RSConfig
+	QueueAddress  string        `help:"data repair queue address" default:"redis://127.0.0.1:6378?db=1&password=abc123"`
+	MaxRepair     int           `help:"maximum segments that can be repaired concurrently" default:"100"`
+	Interval      time.Duration `help:"how frequently checker should audit segments" default:"3600s"`
+	OverlayAddr   string        `help:"Address to contact overlay server through"`
+	PointerDBAddr string        `help:"Address to contact pointerdb server through"`
+	MaxBufferMem  int           `help:"maximum buffer memory (in bytes) to be allocated for read buffers" default:"0x400000"`
+	APIKey        string        `help:"repairer-specific pointerdb access credential"`
+
+	// TODO: this is a huge bug that these are required here. these values should
+	// all come from the pointer for each repair. these need to be removed from the
+	// config
+	MinThreshold     int `help:"TODO: remove" default:"29"`
+	RepairThreshold  int `help:"TODO: remove" default:"35"`
+	SuccessThreshold int `help:"TODO: remove" default:"80"`
+	MaxThreshold     int `help:"TODO: remove" default:"95"`
+	ErasureShareSize int `help:"TODO: remove" default:"1024"`
+
+	// TODO: the repairer shouldn't need to worry about inlining, as it is only
+	// repairing non-inlined things.
+	MaxInlineSize int `help:"TODO: remove" default:"4096"`
 }
 
 // Run runs the repairer with configured values
