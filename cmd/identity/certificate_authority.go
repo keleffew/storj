@@ -43,8 +43,8 @@ func init() {
 	rootCmd.AddCommand(caCmd)
 	caCmd.AddCommand(newCACmd)
 	caCmd.AddCommand(getIDCmd)
-	cfgstruct.Bind(newCACmd.Flags(), &newCACfg, cfgstruct.ConfDir(defaultConfDir))
-	cfgstruct.Bind(getIDCmd.Flags(), &getIDCfg, cfgstruct.ConfDir(defaultConfDir))
+	cfgstruct.Bind(newCACmd.Flags(), &newCACfg, cfgstruct.ConfDir(defaultConfDir, false))
+	cfgstruct.Bind(getIDCmd.Flags(), &getIDCfg, cfgstruct.ConfDir(defaultConfDir, false))
 }
 
 func cmdNewCA(cmd *cobra.Command, args []string) error {
