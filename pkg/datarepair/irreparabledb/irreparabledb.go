@@ -7,7 +7,6 @@ import (
 	"context"
 
 	"github.com/zeebo/errs"
-
 	"storj.io/storj/internal/migrate"
 	dbx "storj.io/storj/pkg/datarepair/irreparabledb/dbx"
 	"storj.io/storj/pkg/utils"
@@ -32,7 +31,7 @@ type RemoteSegmentInfo struct {
 
 // New creates instance of Server
 func New(source string) (*Database, error) {
-	driver, source, err := utils.SplitURL(source)
+	driver, source, err := utils.SplitDBURL(source)
 	if err != nil {
 		return nil, Error.Wrap(err)
 	}

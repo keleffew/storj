@@ -180,7 +180,7 @@ func cmdSetup(cmd *cobra.Command, args []string) (err error) {
 
 func cmdDiag(cmd *cobra.Command, args []string) (err error) {
 	// open the psql db
-	driver, source, err := utils.SplitURL(diagCfg.DatabaseURL)
+	driver, source, err := utils.SplitDBURL(diagCfg.DatabaseURL)
 	if err != nil {
 		return errs.New("Invalid Database URL: %+v", err)
 	}

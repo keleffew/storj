@@ -32,7 +32,7 @@ func (c Config) Run(ctx context.Context, server *provider.Provider) (err error) 
 
 	zap.S().Debug("Starting Bandwidth Agreement Receiver...")
 
-	driver, source, err := utils.SplitURL(c.DatabaseURL)
+	driver, source, err := utils.SplitDBURL(c.DatabaseURL)
 	if err != nil {
 		return errs.New("Invalid Database URL: %+v", err)
 	}

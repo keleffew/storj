@@ -5,6 +5,7 @@ package main
 
 import (
 	"go.uber.org/zap"
+
 	"storj.io/storj/pkg/overlay"
 	"storj.io/storj/pkg/statdb"
 	"storj.io/storj/pkg/utils"
@@ -20,7 +21,7 @@ type cacheConfig struct {
 }
 
 func (c cacheConfig) open() (*overlay.Cache, error) {
-	driver, source, err := utils.SplitURL(c.DatabaseURL)
+	driver, source, err := utils.SplitDBURL(c.DatabaseURL)
 	if err != nil {
 		return nil, Error.Wrap(err)
 	}

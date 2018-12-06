@@ -32,7 +32,7 @@ func (c Config) initialize(ctx context.Context) (Tally, error) {
 	if err != nil {
 		return nil, Error.Wrap(err)
 	}
-	driver, source, err := utils.SplitURL(c.DatabaseURL)
+	driver, source, err := utils.SplitDBURL(c.DatabaseURL)
 	if err != nil {
 		return nil, err
 	}

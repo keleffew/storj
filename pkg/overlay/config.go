@@ -65,7 +65,7 @@ func (c Config) Run(ctx context.Context, server *provider.Provider) (
 		return Error.New("programmer error: statdb responsibility unstarted")
 	}
 
-	driver, source, err := utils.SplitURL(c.DatabaseURL)
+	driver, source, err := utils.SplitDBURL(c.DatabaseURL)
 	if err != nil {
 		return Error.Wrap(err)
 	}

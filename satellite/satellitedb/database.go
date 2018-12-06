@@ -16,7 +16,7 @@ type DB struct {
 
 // NewDB creates instance of database (supports: postgres, sqlite3)
 func NewDB(databaseURL string) (*DB, error) {
-	driver, source, err := utils.SplitURL(databaseURL)
+	driver, source, err := utils.SplitDBURL(databaseURL)
 	if err != nil {
 		return nil, err
 	}

@@ -36,7 +36,7 @@ type Config struct {
 }
 
 func newKeyValueStore(dbURLString string) (db storage.KeyValueStore, err error) {
-	driver, source, err := utils.SplitURL(dbURLString)
+	driver, source, err := utils.SplitDBURL(dbURLString)
 	if err != nil {
 		return nil, err
 	}

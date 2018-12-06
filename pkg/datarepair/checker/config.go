@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
 	"storj.io/storj/pkg/datarepair/irreparabledb"
 	"storj.io/storj/pkg/datarepair/queue"
 	"storj.io/storj/pkg/overlay"
