@@ -40,7 +40,7 @@ func init() {
 	defaultConfDir := fpath.ApplicationDir("storj", "uplink")
 	CLICmd.AddCommand(setupCmd)
 	GWCmd.AddCommand(setupCmd)
-	cfgstruct.Bind(setupCmd.Flags(), &setupCfg, cfgstruct.ConfDir(defaultConfDir))
+	cfgstruct.Bind(setupCmd.Flags(), &setupCfg, cfgstruct.ConfDir(defaultConfDir, false))
 }
 
 func cmdSetup(cmd *cobra.Command, args []string) (err error) {

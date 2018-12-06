@@ -6,6 +6,7 @@ package cfgstruct
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -14,13 +15,22 @@ import (
 )
 
 // BindOpt is an option for the Bind method
-type BindOpt func(vars map[string]string)
+type BindOpt func(vars map[string]confVar)
 
-// ConfDir sets a variable for default options called $CONFDIR
-func ConfDir(confdir string) BindOpt {
-	return BindOpt(func(vars map[string]string) {
-		vars["CONFDIR"] = os.ExpandEnv(confdir)
+// ConfDir sets variables for default options called $CONFDIR and $CONFNAME.
+// If nested is true, appends the parent struct field name to the paths before
+// descending into substructs.
+func ConfDir(confdir string, nested bool) BindOpt {
+	val := filepath.Clean(os.ExpandEnv(confdir))
+	return BindOpt(func(vars map[string]confVar) {
+		vars["CONFDIR"] = confVar{val: val, nested: nested}
+		vars["CONFNAME"] = confVar{val: val, nested: nested}
 	})
+}
+
+type confVar struct {
+	val    string
+	nested bool
 }
 
 // Bind sets flags on a FlagSet that match the configuration struct
@@ -32,7 +42,7 @@ func Bind(flags FlagSet, config interface{}, opts ...BindOpt) {
 		panic(fmt.Sprintf("invalid config type: %#v. "+
 			"Expecting pointer to struct.", config))
 	}
-	vars := map[string]string{}
+	vars := map[string]confVar{}
 	for _, opt := range opts {
 		opt(vars)
 	}
@@ -44,12 +54,24 @@ var (
 )
 
 func bindConfig(flags FlagSet, prefix string, val reflect.Value,
-	vars map[string]string) {
+	vars map[string]confVar) {
 	if val.Kind() != reflect.Struct {
 		panic(fmt.Sprintf("invalid config type: %#v. Expecting struct.",
 			val.Interface()))
 	}
 	typ := val.Type()
+
+	resolvedVars := make(map[string]string, len(vars))
+	{
+		structpath := strings.Replace(prefix, ".", "/", -1)
+		for k, v := range vars {
+			if !v.nested {
+				resolvedVars[k] = v.val
+				continue
+			}
+			resolvedVars[k] = filepath.Join(v.val, structpath)
+		}
+	}
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
@@ -107,7 +129,8 @@ func bindConfig(flags FlagSet, prefix string, val reflect.Value,
 				check(err)
 				flags.Float64Var(fieldaddr.(*float64), flagname, val, help)
 			case reflect.TypeOf(string("")):
-				flags.StringVar(fieldaddr.(*string), flagname, expand(vars, def), help)
+				flags.StringVar(
+					fieldaddr.(*string), flagname, expand(resolvedVars, def), help)
 			case reflect.TypeOf(bool(false)):
 				val, err := strconv.ParseBool(def)
 				check(err)

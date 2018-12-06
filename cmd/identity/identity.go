@@ -31,7 +31,7 @@ var (
 func init() {
 	rootCmd.AddCommand(idCmd)
 	idCmd.AddCommand(newIDCmd)
-	cfgstruct.Bind(newIDCmd.Flags(), &newIDCfg, cfgstruct.ConfDir(defaultConfDir))
+	cfgstruct.Bind(newIDCmd.Flags(), &newIDCfg, cfgstruct.ConfDir(defaultConfDir, false))
 }
 
 func cmdNewID(cmd *cobra.Command, args []string) (err error) {
