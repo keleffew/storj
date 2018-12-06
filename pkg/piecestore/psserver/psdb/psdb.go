@@ -18,6 +18,7 @@ import (
 	_ "github.com/mattn/go-sqlite3" // register sqlite to sql
 	"go.uber.org/zap"
 	monkit "gopkg.in/spacemonkeygo/monkit.v2"
+
 	"storj.io/storj/pkg/pb"
 	"storj.io/storj/pkg/piecestore"
 	"storj.io/storj/pkg/storj"
@@ -51,7 +52,7 @@ func Open(ctx context.Context, dataPath, DBPath string) (db *DB, err error) {
 		return nil, err
 	}
 
-	sqlite, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?cache=shared&mode=memory&mode=rwc&mutex=full", DBPath))
+	sqlite, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?cache=shared&mode=rwc&mutex=full", DBPath))
 	if err != nil {
 		return nil, err
 	}
