@@ -40,7 +40,7 @@ func init() {
 	defaultConfDir := fpath.ApplicationDir("storj", "uplink")
 	CLICmd.AddCommand(setupCmd)
 	GWCmd.AddCommand(setupCmd)
-	cfgstruct.Bind(setupCmd.Flags(), &setupCfg, cfgstruct.ConfDir(defaultConfDir, false))
+	cfgstruct.Bind(setupCmd.Flags(), &setupCfg, cfgstruct.ConfDir(defaultConfDir, true))
 }
 
 func cmdSetup(cmd *cobra.Command, args []string) (err error) {
@@ -101,8 +101,6 @@ func cmdSetup(cmd *cobra.Command, args []string) (err error) {
 	}
 
 	o := map[string]interface{}{
-		"identity.cert-path":     setupCfg.Identity.CertPath,
-		"identity.key-path":      setupCfg.Identity.KeyPath,
 		"client.api-key":         setupCfg.APIKey,
 		"client.pointer-db-addr": setupCfg.SatelliteAddr,
 		"client.overlay-addr":    setupCfg.SatelliteAddr,
