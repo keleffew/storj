@@ -20,7 +20,7 @@ import (
 type Config struct {
 	GatewayConfig
 	SatelliteAddr string `help:"satellite main endpoint" default:""`
-	DatabaseURL   string `help:"" default:"sqlite3://$CONFDIR/satellitedb.db?cache=shared"`
+	DatabaseURL   string `help:"" default:"sqlite3://$CONFDIR/satellitedb.db"`
 }
 
 // Run implements Responsibility interface

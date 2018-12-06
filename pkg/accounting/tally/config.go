@@ -20,7 +20,7 @@ import (
 // Config contains configurable values for tally
 type Config struct {
 	Interval    time.Duration `help:"how frequently tally should run" default:"30s"`
-	DatabaseURL string        `help:"the database connection string to use" default:"sqlite3://$CONFDIR/accounting.db?cache=shared"`
+	DatabaseURL string        `help:"the database connection string to use" default:"sqlite3://$CONFDIR/accounting.db"`
 }
 
 // Initialize a tally struct
@@ -36,12 +36,10 @@ func (c Config) initialize(ctx context.Context) (Tally, error) {
 	if err != nil {
 		return nil, err
 	}
-	zap.L().Warn("Pre tally NewDBManager : " + c.DatabaseURL)
 	dbx, err := dbManager.NewDBManager(driver, source)
 	if err != nil {
 		return nil, err
 	}
-	zap.L().Warn("Post tally NewDBManager")
 	return newTally(zap.L(), db, dbx, pointerdb, overlay, kademlia, 0, c.Interval), nil
 }
 

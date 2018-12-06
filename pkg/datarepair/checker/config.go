@@ -22,7 +22,7 @@ import (
 type Config struct {
 	QueueAddress     string        `help:"data checker queue address" default:"redis://127.0.0.1:6378?db=1&password=abc123"`
 	Interval         time.Duration `help:"how frequently checker should audit segments" default:"30s"`
-	IrreparabledbURL string        `help:"the database connection string to use" default:"sqlite3://$CONFDIR/irreparabledb.db?cache=shared"`
+	IrreparabledbURL string        `help:"the database connection string to use" default:"sqlite3://$CONFDIR/irreparabledb.db"`
 }
 
 // Initialize a Checker struct

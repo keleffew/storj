@@ -49,7 +49,7 @@ type Satellite struct {
 	StatDB      statdb.Config
 	BwAgreement bwagreement.Config
 	Web         satelliteweb.Config
-	Database    string `help:"the master database connection string" default:"sqlite3://$CONFDIR/master.db?cache=shared"`
+	Database    string `help:"the master database connection string" default:"sqlite3://$CONFDIR/master.db"`
 	Tally       tally.Config
 }
 

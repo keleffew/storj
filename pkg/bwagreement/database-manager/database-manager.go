@@ -23,34 +23,40 @@ var (
 	mon   = monkit.Package()
 )
 
-// DBManager is an implementation of the database access interface
+//DBManager is an implementation of the database access interface
 type DBManager struct {
 	DB *dbx.DB
-	mu sync.Mutex
 }
+
+var db *DBManager
+var once sync.Once
 
 // NewDBManager creates a new instance of a DatabaseManager
+// except we're using a singleton pattern here, because SQLite
+// will throw lots of "database is locked" errors if we don't
+// let a single db driver instance handle concurrency
 func NewDBManager(driver, source string) (*DBManager, error) {
-	db, err := dbx.Open(driver, source)
+	var err error
+	once.Do(func() {
+		sqlDB, err := dbx.Open(driver, source)
+		if err != nil {
+			return
+		}
+		err = migrate.Create("bwagreement", sqlDB)
+		if err != nil {
+			return
+		}
+		db = &DBManager{DB: sqlDB}
+	})
 	if err != nil {
 		return nil, Error.Wrap(err)
 	}
-	err = migrate.Create("bwagreement", db)
-	if err != nil {
-		return nil, Error.Wrap(err)
-	}
-	return &DBManager{DB: db}, nil
-}
-
-func (dbm *DBManager) locked() func() {
-	dbm.mu.Lock()
-	return dbm.mu.Unlock
+	return db, nil
 }
 
 // Create a db entry for the provided storagenode
 func (dbm *DBManager) Create(ctx context.Context, createBwAgreement *pb.RenterBandwidthAllocation) (bwagreement *dbx.Bwagreement, err error) {
 	defer mon.Task()(&ctx)(&err)
-	defer dbm.locked()()
 
 	signature := createBwAgreement.GetSignature()
 	data := createBwAgreement.GetData()
@@ -69,7 +75,6 @@ func (dbm *DBManager) Create(ctx context.Context, createBwAgreement *pb.RenterBa
 // GetBandwidthAllocations all bandwidth agreements and sorts by satellite
 func (dbm *DBManager) GetBandwidthAllocations(ctx context.Context) (rows []*dbx.Bwagreement, err error) {
 	defer mon.Task()(&ctx)(&err)
-	defer dbm.locked()()
 	rows, err = dbm.DB.All_Bwagreement(ctx)
 	return rows, Error.Wrap(err)
 }
@@ -77,7 +82,6 @@ func (dbm *DBManager) GetBandwidthAllocations(ctx context.Context) (rows []*dbx.
 // GetBandwidthAllocationsSince all bandwidth agreements created since a time
 func (dbm *DBManager) GetBandwidthAllocationsSince(ctx context.Context, since time.Time) (rows []*dbx.Bwagreement, err error) {
 	defer mon.Task()(&ctx)(&err)
-	defer dbm.locked()()
 	rows, err = dbm.DB.All_Bwagreement_By_CreatedAt_Greater(ctx, dbx.Bwagreement_CreatedAt(since))
 	return rows, err
 }
