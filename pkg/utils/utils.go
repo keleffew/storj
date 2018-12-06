@@ -29,6 +29,9 @@ func SplitURL(s string) (string, string, error) {
 	if len(parts) != 2 {
 		return "", "", fmt.Errorf("Could not parse DB URL %s", s)
 	}
+	if parts[0] == "postgres" {
+		parts[1] = s // postgres wants full URLS for its DSN
+	}
 	return parts[0], parts[1], nil
 }
 
