@@ -24,7 +24,10 @@ services:
     - STORJ_LOG_LEVEL=debug
     - STORJ_CHECKER_QUEUE_ADDRESS=redis://redis:6379/?db=1
     - STORJ_REPAIRER_QUEUE_ADDRESS=redis://redis:6379/?db=1
+    - STORJ_EXTERNAL_ADDRESS=172.17.0.1:7777
     restart: always
+    ports:
+    - 7777:7777
     links:
     - redis
     depends_on:
@@ -34,8 +37,11 @@ services:
     environment:
     - SATELLITE_ADDR=satellite:7777
     - STORJ_LOG_LEVEL=debug
-    - STORJ_IDENTITY_ADDRESS=storagenode:7777
+    - STORJ_IDENTITY_ADDRESS=storagenode:7778
+    - STORJ_EXTERNAL_ADDRESS=172.17.0.1:7778
     restart: always
+    ports:
+    - 7778:7778
     links:
     - satellite
   gateway:
@@ -45,8 +51,6 @@ services:
     - API_KEY=abc123
     - SATELLITE_ADDR=satellite:7777
     - STORJ_LOG_LEVEL=debug
-    ports:
-    - 7777:7777
     restart: always
     links:
     - satellite
