@@ -11,8 +11,10 @@ import (
 
 	"storj.io/storj/internal/testcontext"
 	"storj.io/storj/internal/testplanet"
+	"storj.io/storj/internal/teststorj"
 	"storj.io/storj/pkg/overlay"
-	"storj.io/storj/pkg/pb"
+	"storj.io/storj/pkg/statdb"
+	"storj.io/storj/pkg/storj"
 	"storj.io/storj/storage"
 	"storj.io/storj/storage/boltdb"
 	"storj.io/storj/storage/redis"
@@ -20,63 +22,66 @@ import (
 	"storj.io/storj/storage/teststore"
 )
 
-func testCache(ctx context.Context, t *testing.T, store storage.KeyValueStore) {
-	cache := overlay.Cache{DB: store}
+var (
+	valid1ID   = teststorj.NodeIDFromString("valid1")
+	valid2ID   = teststorj.NodeIDFromString("valid2")
+	invalid1ID = teststorj.NodeIDFromString("invalid1")
+	invalid2ID = teststorj.NodeIDFromString("invalid2")
+)
+
+func testCache(ctx context.Context, t *testing.T, store storage.KeyValueStore, sdb *statdb.StatDB) {
+	cache := overlay.Cache{DB: store, StatDB: sdb}
 
 	{ // Put
-		err := cache.Put("valid1", pb.Node{Address: &pb.NodeAddress{Transport: pb.NodeTransport_TCP_TLS_GRPC, Address: "127.0.0.1:9001"}})
+		err := cache.Put(ctx, valid1ID, *teststorj.MockNode("valid1"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = cache.Put("valid2", pb.Node{Address: &pb.NodeAddress{Transport: pb.NodeTransport_TCP_TLS_GRPC, Address: "127.0.0.1:9002"}})
+		err = cache.Put(ctx, valid2ID, *teststorj.MockNode("valid2"))
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	{ // Get
-		valid2, err := cache.Get(ctx, "valid2")
-		if assert.NoError(t, err) {
-			assert.Equal(t, valid2.Address.Address, "127.0.0.1:9002")
-		}
+		valid2, err := cache.Get(ctx, valid2ID)
+		assert.NoError(t, err)
+		assert.Equal(t, valid2.Id, valid2ID)
 
-		invalid2, err := cache.Get(ctx, "invalid2")
+		invalid2, err := cache.Get(ctx, invalid2ID)
 		assert.Error(t, err)
 		assert.Nil(t, invalid2)
 
 		if storeClient, ok := store.(*teststore.Client); ok {
 			storeClient.ForceError++
-			_, err := cache.Get(ctx, "valid1")
+			_, err := cache.Get(ctx, valid1ID)
 			assert.Error(t, err)
 		}
 	}
 
 	{ // GetAll
-		nodes, err := cache.GetAll(ctx, []string{"valid2", "valid1", "valid2"})
-		if assert.NoError(t, err) {
-			assert.Equal(t, nodes[0].Address.Address, "127.0.0.1:9002")
-			assert.Equal(t, nodes[1].Address.Address, "127.0.0.1:9001")
-			assert.Equal(t, nodes[2].Address.Address, "127.0.0.1:9002")
-		}
+		nodes, err := cache.GetAll(ctx, storj.NodeIDList{valid2ID, valid1ID, valid2ID})
+		assert.NoError(t, err)
+		assert.Equal(t, nodes[0].Id, valid2ID)
+		assert.Equal(t, nodes[1].Id, valid1ID)
+		assert.Equal(t, nodes[2].Id, valid2ID)
 
-		nodes, err = cache.GetAll(ctx, []string{"valid1", "invalid"})
-		if assert.NoError(t, err) {
-			assert.Equal(t, nodes[0].Address.Address, "127.0.0.1:9001")
-			assert.Nil(t, nodes[1])
-		}
+		nodes, err = cache.GetAll(ctx, storj.NodeIDList{valid1ID, invalid1ID})
+		assert.NoError(t, err)
+		assert.Equal(t, nodes[0].Id, valid1ID)
+		assert.Nil(t, nodes[1])
 
-		nodes, err = cache.GetAll(ctx, []string{"", ""})
-		if assert.NoError(t, err) {
-			assert.Nil(t, nodes[0])
-			assert.Nil(t, nodes[1])
-		}
+		nodes, err = cache.GetAll(ctx, make(storj.NodeIDList, 2))
+		assert.NoError(t, err)
+		assert.Nil(t, nodes[0])
+		assert.Nil(t, nodes[1])
 
-		_, err = cache.GetAll(ctx, []string{})
+		_, err = cache.GetAll(ctx, storj.NodeIDList{})
 		assert.True(t, overlay.OverlayError.Has(err))
 
 		if storeClient, ok := store.(*teststore.Client); ok {
 			storeClient.ForceError++
-			_, err := cache.GetAll(ctx, []string{"valid1", "valid2"})
+			_, err := cache.GetAll(ctx, storj.NodeIDList{valid1ID, valid2ID})
 			assert.Error(t, err)
 		}
 	}
@@ -85,6 +90,14 @@ func testCache(ctx context.Context, t *testing.T, store storage.KeyValueStore) {
 func TestCache_Redis(t *testing.T) {
 	ctx := testcontext.New(t)
 	defer ctx.Cleanup()
+
+	planet, err := testplanet.New(t, 1, 4, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ctx.Check(planet.Shutdown)
+	planet.Start(ctx)
+	sdb := planet.Satellites[0].StatDB
 
 	redisAddr, cleanup, err := redisserver.Start()
 	if err != nil {
@@ -98,12 +111,20 @@ func TestCache_Redis(t *testing.T) {
 	}
 	defer ctx.Check(store.Close)
 
-	testCache(ctx, t, store)
+	testCache(ctx, t, store, sdb)
 }
 
 func TestCache_Bolt(t *testing.T) {
 	ctx := testcontext.New(t)
 	defer ctx.Cleanup()
+
+	planet, err := testplanet.New(t, 1, 4, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ctx.Check(planet.Shutdown)
+	planet.Start(ctx)
+	sdb := planet.Satellites[0].StatDB
 
 	client, err := boltdb.New(ctx.File("overlay.db"), "overlay")
 	if err != nil {
@@ -111,14 +132,22 @@ func TestCache_Bolt(t *testing.T) {
 	}
 	defer ctx.Check(client.Close)
 
-	testCache(ctx, t, client)
+	testCache(ctx, t, client, sdb)
 }
 
 func TestCache_Store(t *testing.T) {
 	ctx := testcontext.New(t)
 	defer ctx.Cleanup()
 
-	testCache(ctx, t, teststore.New())
+	planet, err := testplanet.New(t, 1, 4, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ctx.Check(planet.Shutdown)
+	planet.Start(ctx)
+	sdb := planet.Satellites[0].StatDB
+
+	testCache(ctx, t, teststore.New(), sdb)
 }
 
 func TestCache_Refresh(t *testing.T) {

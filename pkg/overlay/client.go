@@ -8,11 +8,10 @@ import (
 
 	"github.com/zeebo/errs"
 
-	"storj.io/storj/pkg/transport"
-
-	"storj.io/storj/pkg/dht"
 	"storj.io/storj/pkg/pb"
 	"storj.io/storj/pkg/provider"
+	"storj.io/storj/pkg/storj"
+	"storj.io/storj/pkg/transport"
 )
 
 // Client is the interface that defines an overlay client.
@@ -29,8 +28,8 @@ var ClientError = errs.Class("Client Error")
 //Client implements the Overlay Client interface
 type Client interface {
 	Choose(ctx context.Context, op Options) ([]*pb.Node, error)
-	Lookup(ctx context.Context, nodeID dht.NodeID) (*pb.Node, error)
-	BulkLookup(ctx context.Context, nodeIDs []dht.NodeID) ([]*pb.Node, error)
+	Lookup(ctx context.Context, nodeID storj.NodeID) (*pb.Node, error)
+	BulkLookup(ctx context.Context, nodeIDs storj.NodeIDList) ([]*pb.Node, error)
 }
 
 // Overlay is the overlay concrete implementation of the client interface
@@ -40,9 +39,13 @@ type Overlay struct {
 
 // Options contains parameters for selecting nodes
 type Options struct {
-	Amount   int
-	Space    int64
-	Excluded []dht.NodeID
+	Amount       int
+	Space        int64
+	Uptime       float64
+	UptimeCount  int64
+	AuditSuccess float64
+	AuditCount   int64
+	Excluded     storj.NodeIDList
 }
 
 // NewOverlayClient returns a new intialized Overlay Client
@@ -66,15 +69,19 @@ var _ Client = (*Overlay)(nil)
 
 // Choose implements the client.Choose interface
 func (o *Overlay) Choose(ctx context.Context, op Options) ([]*pb.Node, error) {
-	var exIDs []string
-	for _, id := range op.Excluded {
-		exIDs = append(exIDs, id.String())
-	}
+	var exIDs storj.NodeIDList
+	exIDs = append(exIDs, op.Excluded...)
 	// TODO(coyle): We will also need to communicate with the reputation service here
 	resp, err := o.client.FindStorageNodes(ctx, &pb.FindStorageNodesRequest{
 		Opts: &pb.OverlayOptions{
-			Amount:        int64(op.Amount),
-			Restrictions:  &pb.NodeRestrictions{FreeDisk: op.Space},
+			Amount:       int64(op.Amount),
+			Restrictions: &pb.NodeRestrictions{FreeDisk: op.Space},
+			MinStats: &pb.NodeStats{
+				UptimeRatio:       op.Uptime,
+				UptimeCount:       op.UptimeCount,
+				AuditSuccessRatio: op.AuditSuccess,
+				AuditCount:        op.AuditCount,
+			},
 			ExcludedNodes: exIDs,
 		},
 	})
@@ -86,8 +93,8 @@ func (o *Overlay) Choose(ctx context.Context, op Options) ([]*pb.Node, error) {
 }
 
 // Lookup provides a Node with the given ID
-func (o *Overlay) Lookup(ctx context.Context, nodeID dht.NodeID) (*pb.Node, error) {
-	resp, err := o.client.Lookup(ctx, &pb.LookupRequest{NodeID: nodeID.String()})
+func (o *Overlay) Lookup(ctx context.Context, nodeID storj.NodeID) (*pb.Node, error) {
+	resp, err := o.client.Lookup(ctx, &pb.LookupRequest{NodeId: nodeID})
 	if err != nil {
 		return nil, err
 	}
@@ -95,11 +102,11 @@ func (o *Overlay) Lookup(ctx context.Context, nodeID dht.NodeID) (*pb.Node, erro
 	return resp.GetNode(), nil
 }
 
-//BulkLookup provides a list of Nodes with the given IDs
-func (o *Overlay) BulkLookup(ctx context.Context, nodeIDs []dht.NodeID) ([]*pb.Node, error) {
+// BulkLookup provides a list of Nodes with the given IDs
+func (o *Overlay) BulkLookup(ctx context.Context, nodeIDs storj.NodeIDList) ([]*pb.Node, error) {
 	var reqs pb.LookupRequests
 	for _, v := range nodeIDs {
-		reqs.Lookuprequest = append(reqs.Lookuprequest, &pb.LookupRequest{NodeID: v.String()})
+		reqs.LookupRequest = append(reqs.LookupRequest, &pb.LookupRequest{NodeId: v})
 	}
 	resp, err := o.client.BulkLookup(ctx, &reqs)
 
@@ -108,7 +115,7 @@ func (o *Overlay) BulkLookup(ctx context.Context, nodeIDs []dht.NodeID) ([]*pb.N
 	}
 
 	var nodes []*pb.Node
-	for _, v := range resp.Lookupresponse {
+	for _, v := range resp.LookupResponse {
 		nodes = append(nodes, v.Node)
 	}
 	return nodes, nil

@@ -13,11 +13,9 @@ import (
 	"storj.io/storj/internal/fpath"
 	"storj.io/storj/pkg/cfgstruct"
 	"storj.io/storj/pkg/miniogw"
-	"storj.io/storj/pkg/storage/buckets"
+	"storj.io/storj/pkg/storage/streams"
 	"storj.io/storj/pkg/storj"
 )
-
-const defaultConfDir = "$HOME/.storj/uplink"
 
 // Config is miniogw.Config configuration
 type Config struct {
@@ -40,19 +38,24 @@ var GWCmd = &cobra.Command{
 
 func addCmd(cmd *cobra.Command, root *cobra.Command) *cobra.Command {
 	root.AddCommand(cmd)
+
+	defaultConfDir := fpath.ApplicationDir("storj", "uplink")
 	cfgstruct.Bind(cmd.Flags(), &cfg, cfgstruct.ConfDir(defaultConfDir))
 	cmd.Flags().String("config", filepath.Join(defaultConfDir, "config.yaml"), "path to configuration")
 	return cmd
 }
 
-// BucketStore loads the buckets.Store
-func (c *Config) BucketStore(ctx context.Context) (buckets.Store, error) {
-	identity, err := c.Load()
+// Metainfo loads the storj.Metainfo
+//
+// Temporarily it also returns an instance of streams.Store until we improve
+// the metainfo and streas implementations.
+func (c *Config) Metainfo(ctx context.Context) (storj.Metainfo, streams.Store, error) {
+	identity, err := c.Identity.Load()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return c.GetBucketStore(ctx, identity)
+	return c.GetMetainfo(ctx, identity)
 }
 
 func convertError(err error, path fpath.FPath) error {

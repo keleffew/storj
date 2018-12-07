@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"storj.io/storj/internal/fpath"
 	"storj.io/storj/pkg/cfgstruct"
 	"storj.io/storj/pkg/process"
 	"storj.io/storj/pkg/provider"
@@ -55,9 +56,9 @@ func cmdSetup(cmd *cobra.Command, args []string) (err error) {
 		return err
 	}
 
-	_, err = os.Stat(setupCfg.BasePath)
-	if !setupCfg.Overwrite && err == nil {
-		fmt.Println("A captplanet configuration already exists. Rerun with --overwrite")
+	valid, err := fpath.IsValidSetupDir(setupCfg.BasePath)
+	if !setupCfg.Overwrite && !valid {
+		fmt.Printf("captplanet configuration already exists (%v). rerun with --overwrite\n", setupCfg.BasePath)
 		return nil
 	} else if setupCfg.Overwrite && err == nil {
 		fmt.Println("overwriting existing captplanet config")
@@ -149,18 +150,18 @@ func cmdSetup(cmd *cobra.Command, args []string) (err error) {
 		"satellite.repairer.pointer-db-addr": joinHostPort(
 			setupCfg.ListenHost, startingPort+1),
 		"satellite.repairer.api-key": setupCfg.APIKey,
-		"uplink.cert-path":           setupCfg.ULIdentity.CertPath,
-		"uplink.key-path":            setupCfg.ULIdentity.KeyPath,
-		"uplink.address": joinHostPort(
+		"uplink.identity.cert-path":  setupCfg.ULIdentity.CertPath,
+		"uplink.identity.key-path":   setupCfg.ULIdentity.KeyPath,
+		"uplink.identity.address": joinHostPort(
 			setupCfg.ListenHost, startingPort),
-		"uplink.overlay-addr": joinHostPort(
+		"uplink.client.overlay-addr": joinHostPort(
 			setupCfg.ListenHost, startingPort+1),
-		"uplink.pointer-db-addr": joinHostPort(
+		"uplink.client.pointer-db-addr": joinHostPort(
 			setupCfg.ListenHost, startingPort+1),
-		"uplink.minio-dir": filepath.Join(
+		"uplink.minio.dir": filepath.Join(
 			setupCfg.BasePath, "uplink", "minio"),
-		"uplink.enc-key":          setupCfg.EncKey,
-		"uplink.api-key":          setupCfg.APIKey,
+		"uplink.enc.key":          setupCfg.EncKey,
+		"uplink.client.api-key":   setupCfg.APIKey,
 		"pointer-db.auth.api-key": setupCfg.APIKey,
 
 		// Repairer

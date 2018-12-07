@@ -12,13 +12,14 @@ import (
 	"github.com/vivint/infectious"
 
 	"storj.io/storj/pkg/eestream"
+	"storj.io/storj/pkg/metainfo/kvmetainfo"
 	"storj.io/storj/pkg/miniogw/logging"
 	"storj.io/storj/pkg/overlay"
 	"storj.io/storj/pkg/pointerdb/pdbclient"
 	"storj.io/storj/pkg/provider"
 	"storj.io/storj/pkg/storage/buckets"
 	"storj.io/storj/pkg/storage/ec"
-	segment "storj.io/storj/pkg/storage/segments"
+	"storj.io/storj/pkg/storage/segments"
 	"storj.io/storj/pkg/storage/streams"
 	"storj.io/storj/pkg/storj"
 )
@@ -37,10 +38,10 @@ type RSConfig struct {
 // EncryptionConfig is a configuration struct that keeps details about
 // encrypting segments
 type EncryptionConfig struct {
-	EncKey       string `help:"root key for encrypting the data"`
-	EncBlockSize int    `help:"size (in bytes) of encrypted blocks" default:"1024"`
-	EncType      int    `help:"Type of encryption to use for content and metadata (1=AES-GCM, 2=SecretBox)" default:"1"`
-	PathEncType  int    `help:"Type of encryption to use for paths (0=Unencrypted, 1=AES-GCM, 2=SecretBox)" default:"1"`
+	Key       string `help:"root key for encrypting the data"`
+	BlockSize int    `help:"size (in bytes) of encrypted blocks" default:"1024"`
+	DataType  int    `help:"Type of encryption to use for content and metadata (1=AES-GCM, 2=SecretBox)" default:"1"`
+	PathType  int    `help:"Type of encryption to use for paths (0=Unencrypted, 1=AES-GCM, 2=SecretBox)" default:"1"`
 }
 
 // MinioConfig is a configuration struct that keeps details about starting
@@ -48,7 +49,7 @@ type EncryptionConfig struct {
 type MinioConfig struct {
 	AccessKey string `help:"Minio Access Key to use" default:"insecure-dev-access-key"`
 	SecretKey string `help:"Minio Secret Key to use" default:"insecure-dev-secret-key"`
-	MinioDir  string `help:"Minio generic server config path" default:"$CONFDIR/minio"`
+	Dir       string `help:"Minio generic server config path" default:"$CONFDIR/minio"`
 }
 
 // ClientConfig is a configuration struct for the miniogw that controls how
@@ -66,18 +67,18 @@ type ClientConfig struct {
 // Config is a general miniogw configuration struct. This should be everything
 // one needs to start a minio gateway.
 type Config struct {
-	provider.IdentityConfig
-	MinioConfig
-	ClientConfig
-	RSConfig
-	EncryptionConfig
+	Identity provider.IdentityConfig
+	Minio    MinioConfig
+	Client   ClientConfig
+	RS       RSConfig
+	Enc      EncryptionConfig
 }
 
 // Run starts a Minio Gateway given proper config
 func (c Config) Run(ctx context.Context) (err error) {
 	defer mon.Task()(&ctx)(&err)
 
-	identity, err := c.Load()
+	identity, err := c.Identity.Load()
 	if err != nil {
 		return err
 	}
@@ -95,17 +96,17 @@ func (c Config) Run(ctx context.Context) (err error) {
 	}
 
 	// TODO(jt): Surely there is a better way. This is so upsetting
-	err = os.Setenv("MINIO_ACCESS_KEY", c.AccessKey)
+	err = os.Setenv("MINIO_ACCESS_KEY", c.Minio.AccessKey)
 	if err != nil {
 		return err
 	}
-	err = os.Setenv("MINIO_SECRET_KEY", c.SecretKey)
+	err = os.Setenv("MINIO_SECRET_KEY", c.Minio.SecretKey)
 	if err != nil {
 		return err
 	}
 
 	minio.Main([]string{"storj", "gateway", "storj",
-		"--address", c.Address, "--config-dir", c.MinioDir, "--quiet"})
+		"--address", c.Identity.Address, "--config-dir", c.Minio.Dir, "--quiet"})
 	return Error.New("unexpected minio exit")
 }
 
@@ -125,43 +126,82 @@ func (c Config) action(ctx context.Context, cliCtx *cli.Context, identity *provi
 func (c Config) GetBucketStore(ctx context.Context, identity *provider.FullIdentity) (bs buckets.Store, err error) {
 	defer mon.Task()(&ctx)(&err)
 
+	buckets, _, _, _, _, err := c.init(ctx, identity)
+
+	return buckets, err
+}
+
+// GetMetainfo returns an implementation of storj.Metainfo
+func (c Config) GetMetainfo(ctx context.Context, identity *provider.FullIdentity) (db storj.Metainfo, ss streams.Store, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	buckets, streams, segments, pdb, key, err := c.init(ctx, identity)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return kvmetainfo.New(buckets, streams, segments, pdb, key), streams, nil
+}
+
+func (c Config) init(ctx context.Context, identity *provider.FullIdentity) (buckets.Store, streams.Store, segments.Store, pdbclient.Client, *storj.Key, error) {
 	var oc overlay.Client
-	oc, err = overlay.NewOverlayClient(identity, c.OverlayAddr)
+	oc, err := overlay.NewOverlayClient(identity, c.Client.OverlayAddr)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
-	pdb, err := pdbclient.NewClient(identity, c.PointerDBAddr, c.APIKey)
+	pdb, err := pdbclient.NewClient(identity, c.Client.PointerDBAddr, c.Client.APIKey)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
-	ec := ecclient.NewClient(identity, c.MaxBufferMem)
-	fc, err := infectious.NewFEC(c.MinThreshold, c.MaxThreshold)
+	ec := ecclient.NewClient(identity, c.RS.MaxBufferMem)
+	fc, err := infectious.NewFEC(c.RS.MinThreshold, c.RS.MaxThreshold)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, nil, nil, err
 	}
-	rs, err := eestream.NewRedundancyStrategy(eestream.NewRSScheme(fc, c.ErasureShareSize), c.RepairThreshold, c.SuccessThreshold)
+	rs, err := eestream.NewRedundancyStrategy(eestream.NewRSScheme(fc, c.RS.ErasureShareSize), c.RS.RepairThreshold, c.RS.SuccessThreshold)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
-	segments := segment.NewSegmentStore(oc, ec, pdb, rs, c.MaxInlineSize)
+	segments := segments.NewSegmentStore(oc, ec, pdb, rs, c.Client.MaxInlineSize)
 
-	if c.ErasureShareSize*c.MinThreshold%c.EncBlockSize != 0 {
+	if c.RS.ErasureShareSize*c.RS.MinThreshold%c.Enc.BlockSize != 0 {
 		err = Error.New("EncryptionBlockSize must be a multiple of ErasureShareSize * RS MinThreshold")
-		return nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
 	key := new(storj.Key)
-	copy(key[:], c.EncKey)
+	copy(key[:], c.Enc.Key)
 
-	stream, err := streams.NewStreamStore(segments, c.SegmentSize, key, c.EncBlockSize, storj.Cipher(c.EncType))
+	streams, err := streams.NewStreamStore(segments, c.Client.SegmentSize, key, c.Enc.BlockSize, storj.Cipher(c.Enc.DataType))
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
-	return buckets.NewStore(stream), nil
+	buckets := buckets.NewStore(streams)
+
+	return buckets, streams, segments, pdb, key, nil
+}
+
+// GetRedundancyScheme returns the configured redundancy scheme for new uploads
+func (c Config) GetRedundancyScheme() storj.RedundancyScheme {
+	return storj.RedundancyScheme{
+		Algorithm:      storj.ReedSolomon,
+		RequiredShares: int16(c.RS.MinThreshold),
+		RepairShares:   int16(c.RS.RepairThreshold),
+		OptimalShares:  int16(c.RS.SuccessThreshold),
+		TotalShares:    int16(c.RS.MaxThreshold),
+	}
+}
+
+// GetEncryptionScheme returns the configured encryption scheme for new uploads
+func (c Config) GetEncryptionScheme() storj.EncryptionScheme {
+	return storj.EncryptionScheme{
+		Cipher:    storj.Cipher(c.Enc.DataType),
+		BlockSize: int32(c.Enc.BlockSize),
+	}
 }
 
 // NewGateway creates a new minio Gateway
@@ -173,5 +213,5 @@ func (c Config) NewGateway(ctx context.Context, identity *provider.FullIdentity)
 		return nil, err
 	}
 
-	return NewStorjGateway(bs, storj.Cipher(c.PathEncType)), nil
+	return NewStorjGateway(bs, storj.Cipher(c.Enc.PathType)), nil
 }

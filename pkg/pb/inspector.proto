@@ -4,7 +4,8 @@
 syntax = "proto3";
 option go_package = "pb";
 
-import "overlay.proto";
+import "gogo.proto";
+import "node.proto";
 
 package inspector;
 
@@ -16,6 +17,10 @@ service Inspector {
   rpc GetBuckets(GetBucketsRequest) returns (GetBucketsResponse);
   // GetBucket returns the details of a single k bucket from the kademlia instance
   rpc GetBucket(GetBucketRequest) returns (GetBucketResponse);
+  // PingNodes sends a PING RPC to a node and returns it's availability
+  rpc PingNode(PingNodeRequest) returns (PingNodeResponse);
+  // LookupNode triggers a Kademlia FindNode and returns the response
+  rpc LookupNode(LookupNodeRequest) returns (LookupNodeResponse);
 
   // StatDB commands:
   // GetStats returns the stats for a particular node ID
@@ -26,18 +31,19 @@ service Inspector {
 
 // GetStats
 message GetStatsRequest {
-  string node_id = 1;
+  bytes node_id = 1 [(gogoproto.customtype) = "NodeID", (gogoproto.nullable) = false];
 }
 
 message GetStatsResponse {
   int64 audit_count = 1;
-  double uptime_ratio = 2;
-  double audit_ratio = 3;
+  double audit_ratio = 2;
+  int64 uptime_count = 3;
+  double uptime_ratio = 4;
 }
 
 // CreateStats
 message CreateStatsRequest {
-  string node_id = 1;
+  bytes node_id = 1 [(gogoproto.customtype) = "NodeID", (gogoproto.nullable) = false];
   int64 audit_count = 2;
   int64 audit_success_count = 3;
   int64 uptime_count = 4;
@@ -62,23 +68,42 @@ message GetBucketsRequest {
 
 message GetBucketsResponse {
   int64 total = 1;
-  repeated bytes ids = 2;
+  repeated bytes ids = 2 [(gogoproto.customtype) = "NodeID"];
 }
 
 // GetBucket
 message GetBucketRequest {
-  string id = 1;
+  bytes id = 1 [(gogoproto.customtype) = "NodeID", (gogoproto.nullable) = false];
 }
 
 message GetBucketResponse {
-  string id = 1;
-  repeated overlay.Node nodes = 2;
+  bytes id = 1 [(gogoproto.customtype) = "NodeID", (gogoproto.nullable) = false];
+  repeated node.Node nodes = 2;
 }
 
 message Bucket {
-  repeated overlay.Node nodes = 2; 
+  repeated node.Node nodes = 2;
 }
 
 message BucketList {
-  repeated overlay.Node nodes = 1;
+  repeated node.Node nodes = 1;
+}
+// PingNode 
+message PingNodeRequest {
+  bytes id = 1 [(gogoproto.customtype) = "NodeID", (gogoproto.nullable) = false];
+  string address = 2;
+}
+
+message PingNodeResponse {
+  bool ok = 1;
+}
+
+message LookupNodeRequest {
+  string id = 1; 
+  string address = 2;
+}
+
+message LookupNodeResponse {
+  node.Node node = 1;
+  node.NodeMetadata meta = 2;
 }

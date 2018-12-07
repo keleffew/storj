@@ -9,9 +9,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"storj.io/storj/pkg/dht"
-	"storj.io/storj/pkg/pb"
 )
 
 // GetBytes transforms an empty interface type into a byte slice
@@ -36,7 +33,18 @@ func ParseURL(s string) (*url.URL, error) {
 			Path:   strings.TrimPrefix(s, "bolt://"),
 		}, nil
 	}
-
+	if strings.HasPrefix(s, "sqlite3://") {
+		return &url.URL{
+			Scheme: "sqlite3",
+			Path:   strings.TrimPrefix(s, "sqlite3://"),
+		}, nil
+	}
+	if strings.HasPrefix(s, "postgres://") {
+		return &url.URL{
+			Scheme: "postgres",
+			Path:   s,
+		}, nil
+	}
 	return url.Parse(s)
 }
 
@@ -108,24 +116,4 @@ func discardNil(ch chan error) chan error {
 		close(r)
 	}()
 	return r
-}
-
-// NodeIDsToLookupRequests ...
-func NodeIDsToLookupRequests(nodeIDs []dht.NodeID) *pb.LookupRequests {
-	var rq []*pb.LookupRequest
-	for _, v := range nodeIDs {
-		r := &pb.LookupRequest{NodeID: v.String()}
-		rq = append(rq, r)
-	}
-	return &pb.LookupRequests{Lookuprequest: rq}
-}
-
-// LookupResponsesToNodes ...
-func LookupResponsesToNodes(responses *pb.LookupResponses) []*pb.Node {
-	var nodes []*pb.Node
-	for _, v := range responses.Lookupresponse {
-		n := v.Node
-		nodes = append(nodes, n)
-	}
-	return nodes
 }

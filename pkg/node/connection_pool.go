@@ -6,12 +6,15 @@ package node
 import (
 	"context"
 	"sync"
+	"sync/atomic"
+	"unsafe"
 
 	"github.com/zeebo/errs"
 	"google.golang.org/grpc"
 
 	"storj.io/storj/pkg/pb"
 	"storj.io/storj/pkg/provider"
+	"storj.io/storj/pkg/storj"
 	"storj.io/storj/pkg/transport"
 	"storj.io/storj/pkg/utils"
 )
@@ -23,7 +26,7 @@ var Error = errs.Class("connection pool error")
 type ConnectionPool struct {
 	tc    transport.Client
 	mu    sync.RWMutex
-	items map[string]*Conn
+	items map[storj.NodeID]*Conn
 }
 
 // Conn is the connection that is stored in the connection pool
@@ -32,7 +35,7 @@ type Conn struct {
 
 	dial   sync.Once
 	client pb.NodesClient
-	grpc   *grpc.ClientConn
+	grpc   unsafe.Pointer //*grpc.ClientConn
 	err    error
 }
 
@@ -43,18 +46,18 @@ func NewConn(addr string) *Conn { return &Conn{addr: addr} }
 func NewConnectionPool(identity *provider.FullIdentity) *ConnectionPool {
 	return &ConnectionPool{
 		tc:    transport.NewClient(identity),
-		items: make(map[string]*Conn),
+		items: make(map[storj.NodeID]*Conn),
 		mu:    sync.RWMutex{},
 	}
 }
 
 // Get retrieves a node connection with the provided nodeID
 // nil is returned if the NodeID is not in the connection pool
-func (pool *ConnectionPool) Get(key string) (interface{}, error) {
+func (pool *ConnectionPool) Get(id storj.NodeID) (interface{}, error) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
-	i, ok := pool.items[key]
+	i, ok := pool.items[id]
 	if !ok {
 		return nil, nil
 	}
@@ -63,28 +66,33 @@ func (pool *ConnectionPool) Get(key string) (interface{}, error) {
 }
 
 // Disconnect deletes a connection associated with the provided NodeID
-func (pool *ConnectionPool) Disconnect(key string) error {
+func (pool *ConnectionPool) Disconnect(id storj.NodeID) error {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
-	return pool.disconnect(key)
+	return pool.disconnect(id)
 
 }
 
-func (pool *ConnectionPool) disconnect(key string) error {
-	i, ok := pool.items[key]
-	if !ok || i.grpc == nil {
+func (pool *ConnectionPool) disconnect(id storj.NodeID) error {
+	conn, ok := pool.items[id]
+	if !ok {
 		return nil
 	}
 
-	delete(pool.items, key)
+	ptr := atomic.LoadPointer(&conn.grpc)
+	if ptr == nil {
+		return nil
+	}
 
-	return i.grpc.Close()
+	delete(pool.items, id)
+
+	return (*grpc.ClientConn)(ptr).Close()
 }
 
 // Dial connects to the node with the given ID and Address returning a gRPC Node Client
 func (pool *ConnectionPool) Dial(ctx context.Context, n *pb.Node) (pb.NodesClient, error) {
-	id := n.GetId()
+	id := n.Id
 	pool.mu.Lock()
 	conn, ok := pool.items[id]
 	if !ok {
@@ -94,12 +102,15 @@ func (pool *ConnectionPool) Dial(ctx context.Context, n *pb.Node) (pb.NodesClien
 	pool.mu.Unlock()
 
 	conn.dial.Do(func() {
-		conn.grpc, conn.err = pool.tc.DialNode(ctx, n, grpc.WithBlock())
+		grpc, err := pool.tc.DialNode(ctx, n, grpc.WithBlock())
+		conn.err = err
 		if conn.err != nil {
 			return
 		}
 
-		conn.client = pb.NewNodesClient(conn.grpc)
+		atomic.StorePointer(&conn.grpc, unsafe.Pointer(grpc))
+
+		conn.client = pb.NewNodesClient(grpc)
 	})
 
 	if conn.err != nil {
@@ -127,6 +138,6 @@ func (pool *ConnectionPool) DisconnectAll() error {
 // Init initializes the cache
 func (pool *ConnectionPool) Init() {
 	pool.mu.Lock()
-	pool.items = make(map[string]*Conn)
+	pool.items = make(map[storj.NodeID]*Conn)
 	pool.mu.Unlock()
 }

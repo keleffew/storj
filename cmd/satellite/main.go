@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -16,9 +15,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/zeebo/errs"
 
+	"storj.io/storj/internal/fpath"
 	"storj.io/storj/pkg/auth/grpcauth"
 	"storj.io/storj/pkg/bwagreement"
-	dbmanager "storj.io/storj/pkg/bwagreement/database-manager"
 	"storj.io/storj/pkg/cfgstruct"
 	"storj.io/storj/pkg/datarepair/checker"
 	"storj.io/storj/pkg/datarepair/queue"
@@ -30,6 +29,8 @@ import (
 	"storj.io/storj/pkg/process"
 	"storj.io/storj/pkg/provider"
 	"storj.io/storj/pkg/statdb"
+	"storj.io/storj/pkg/storj"
+	"storj.io/storj/satellite/satellitedb"
 	"storj.io/storj/storage/redis"
 )
 
@@ -70,6 +71,7 @@ var (
 
 		// Audit audit.Config
 		BwAgreement bwagreement.Config
+		Database    string `help:"satellite database connection string" default:"sqlite3://$CONFDIR/master.db"`
 	}
 	setupCfg struct {
 		BasePath  string `default:"$CONFDIR" help:"base path for setup"`
@@ -78,17 +80,18 @@ var (
 		Overwrite bool `default:"false" help:"whether to overwrite pre-existing configuration files"`
 	}
 	diagCfg struct {
-		DatabaseURL string `help:"the database connection string to use" default:"sqlite3://$CONFDIR/bw.db"`
+		Database string `help:"satellite database connection string" default:"sqlite3://$CONFDIR/master.db"`
 	}
 	qdiagCfg struct {
 		DatabaseURL string `help:"the database connection string to use" default:"redis://127.0.0.1:6378?db=1&password=abc123"`
 		QListLimit  int    `help:"maximum segments that can be requested" default:"1000"`
 	}
 
-	defaultConfDir = "$HOME/.storj/satellite"
+	defaultConfDir string
 )
 
 func init() {
+	defaultConfDir = fpath.ApplicationDir("storj", "satellite")
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(setupCmd)
 	rootCmd.AddCommand(diagCmd)
@@ -100,13 +103,28 @@ func init() {
 }
 
 func cmdRun(cmd *cobra.Command, args []string) (err error) {
+	ctx := process.Ctx(cmd)
+
+	database, err := satellitedb.NewDB(runCfg.Database)
+	if err != nil {
+		return errs.New("Error starting master database on satellite: %+v", err)
+	}
+
+	err = database.CreateTables()
+	if err != nil {
+		return errs.New("Error creating tables for master database on satellite: %+v", err)
+	}
+
+	//nolint ignoring context rules to not create cyclic dependency, will be removed later
+	ctx = context.WithValue(ctx, "masterdb", database)
+
 	return runCfg.Identity.Run(
-		process.Ctx(cmd),
+		ctx,
 		grpcauth.NewAPIKeyInterceptor(),
 		runCfg.Kademlia,
 		runCfg.PointerDB,
-		runCfg.Overlay,
 		runCfg.StatDB,
+		runCfg.Overlay,
 		runCfg.Checker,
 		runCfg.Repairer,
 		// runCfg.Audit,
@@ -120,9 +138,9 @@ func cmdSetup(cmd *cobra.Command, args []string) (err error) {
 		return err
 	}
 
-	_, err = os.Stat(setupCfg.BasePath)
-	if !setupCfg.Overwrite && err == nil {
-		fmt.Println("An satellite configuration already exists. Rerun with --overwrite")
+	valid, err := fpath.IsValidSetupDir(setupCfg.BasePath)
+	if !setupCfg.Overwrite && !valid {
+		fmt.Printf("satellite configuration already exists (%v). rerun with --overwrite\n", setupCfg.BasePath)
 		return nil
 	} else if setupCfg.Overwrite && err == nil {
 		fmt.Println("overwriting existing satellite config")
@@ -160,21 +178,21 @@ func cmdSetup(cmd *cobra.Command, args []string) (err error) {
 }
 
 func cmdDiag(cmd *cobra.Command, args []string) (err error) {
-	// open the psql db
-	u, err := url.Parse(diagCfg.DatabaseURL)
+	database, err := satellitedb.NewDB(diagCfg.Database)
 	if err != nil {
-		return errs.New("Invalid Database URL: %+v", err)
+		return errs.New("error connecting to master database on satellite: %+v", err)
 	}
+	defer func() {
+		err := database.Close()
+		if err != nil {
+			fmt.Printf("error closing connection to master database on satellite: %+v\n", err)
+		}
+	}()
 
-	dbm, err := dbmanager.NewDBManager(u.Scheme, u.Path)
+	//get all bandwidth agreements rows already ordered
+	baRows, err := database.BandwidthAgreement().GetAgreements(context.Background())
 	if err != nil {
-		return err
-	}
-
-	//get all bandwidth aggrements rows already ordered
-	baRows, err := dbm.GetBandwidthAllocations(context.Background())
-	if err != nil {
-		fmt.Printf("error reading satellite database %v: %v\n", u.Path, err)
+		fmt.Printf("error reading satellite database %v: %v\n", diagCfg.Database, err)
 		return err
 	}
 
@@ -188,13 +206,13 @@ func cmdDiag(cmd *cobra.Command, args []string) (err error) {
 	}
 
 	// attributes per uplinkid
-	summaries := make(map[string]*UplinkSummary)
-	uplinkIDs := []string{}
+	summaries := make(map[storj.NodeID]*UplinkSummary)
+	uplinkIDs := storj.NodeIDList{}
 
 	for _, baRow := range baRows {
 		// deserializing rbad you get payerbwallocation, total & storage node id
 		rbad := &pb.RenterBandwidthAllocation_Data{}
-		if err := proto.Unmarshal(baRow.Data, rbad); err != nil {
+		if err := proto.Unmarshal(baRow.Agreement, rbad); err != nil {
 			return err
 		}
 
@@ -204,7 +222,7 @@ func cmdDiag(cmd *cobra.Command, args []string) (err error) {
 			return err
 		}
 
-		uplinkID := string(pbad.GetUplinkId())
+		uplinkID := pbad.UplinkId
 		summary, ok := summaries[uplinkID]
 		if !ok {
 			summaries[uplinkID] = &UplinkSummary{}
@@ -228,7 +246,7 @@ func cmdDiag(cmd *cobra.Command, args []string) (err error) {
 	fmt.Fprintln(w, "UplinkID\tTotal\t# Of Transactions\tPUT Action\tGET Action\t")
 
 	// populate the row fields
-	sort.Strings(uplinkIDs)
+	sort.Sort(uplinkIDs)
 	for _, uplinkID := range uplinkIDs {
 		summary := summaries[uplinkID]
 		fmt.Fprint(w, uplinkID, "\t", summary.TotalBytes, "\t", summary.TotalTransactions, "\t", summary.PutActionCount, "\t", summary.GetActionCount, "\t\n")

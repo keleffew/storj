@@ -11,7 +11,6 @@ CREATE TABLE users (
 	UNIQUE ( email )
 );
 CREATE TABLE companies (
-	id BLOB NOT NULL,
 	user_id BLOB NOT NULL REFERENCES users( id ) ON DELETE CASCADE,
 	name TEXT NOT NULL,
 	address TEXT NOT NULL,
@@ -20,12 +19,13 @@ CREATE TABLE companies (
 	state TEXT NOT NULL,
 	postal_code TEXT NOT NULL,
 	created_at TIMESTAMP NOT NULL,
-	PRIMARY KEY ( id )
+	PRIMARY KEY ( user_id )
 );
 CREATE TABLE projects (
 	id BLOB NOT NULL,
 	owner_id BLOB REFERENCES users( id ) ON DELETE SET NULL,
 	name TEXT NOT NULL,
+	company_name TEXT NOT NULL,
 	description TEXT NOT NULL,
 	terms_accepted INTEGER NOT NULL,
 	created_at TIMESTAMP NOT NULL,

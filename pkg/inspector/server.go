@@ -14,8 +14,10 @@ import (
 	"storj.io/storj/pkg/node"
 	"storj.io/storj/pkg/overlay"
 	"storj.io/storj/pkg/pb"
+	"storj.io/storj/pkg/provider"
 	"storj.io/storj/pkg/statdb"
 	statsproto "storj.io/storj/pkg/statdb/proto"
+	"storj.io/storj/pkg/storj"
 )
 
 var (
@@ -25,11 +27,12 @@ var (
 
 // Server holds references to cache and kad
 type Server struct {
-	dht     dht.DHT
-	cache   *overlay.Cache
-	statdb  *statdb.Server
-	logger  *zap.Logger
-	metrics *monkit.Registry
+	dht      dht.DHT
+	cache    *overlay.Cache
+	statdb   *statdb.StatDB
+	logger   *zap.Logger
+	metrics  *monkit.Registry
+	identity *provider.FullIdentity
 }
 
 // ---------------------
@@ -38,9 +41,18 @@ type Server struct {
 
 // CountNodes returns the number of nodes in the cache and in kademlia
 func (srv *Server) CountNodes(ctx context.Context, req *pb.CountNodesRequest) (*pb.CountNodesResponse, error) {
+	overlayKeys, err := srv.cache.DB.List(nil, 0)
+	if err != nil {
+		return nil, err
+	}
+	kadNodes, err := srv.dht.GetNodes(ctx, srv.identity.ID, 0)
+	if err != nil {
+		return nil, err
+	}
+
 	return &pb.CountNodesResponse{
-		Kademlia: 0,
-		Overlay:  0,
+		Kademlia: int64(len(kadNodes)),
+		Overlay:  int64(len(overlayKeys)),
 	}, nil
 }
 
@@ -54,10 +66,15 @@ func (srv *Server) GetBuckets(ctx context.Context, req *pb.GetBucketsRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	bytes := b.ByteSlices()
+	// TODO(bryanchriswhite): should use bucketID type
+	nodeIDs, err := storj.NodeIDsFromBytes(b.ByteSlices())
+	if err != nil {
+		return nil, err
+	}
 	return &pb.GetBucketsResponse{
 		Total: int64(len(b)),
-		Ids:   bytes,
+		// TODO(bryanchriswhite): should use bucketID type
+		Ids: nodeIDs,
 	}, nil
 }
 
@@ -67,6 +84,7 @@ func (srv *Server) GetBucket(ctx context.Context, req *pb.GetBucketRequest) (*pb
 	if err != nil {
 		return nil, err
 	}
+	// TODO(bryanchriswhite): should use bucketID type
 	bucket, ok := rt.GetBucket(req.Id)
 	if !ok {
 		return &pb.GetBucketResponse{}, ServerError.New("GetBuckets returned non-OK response")
@@ -78,15 +96,60 @@ func (srv *Server) GetBucket(ctx context.Context, req *pb.GetBucketRequest) (*pb
 	}, nil
 }
 
+// PingNode sends a PING RPC to the provided node ID in the Kad network.
+func (srv *Server) PingNode(ctx context.Context, req *pb.PingNodeRequest) (*pb.PingNodeResponse, error) {
+	rt, err := srv.dht.GetRoutingTable(ctx)
+	if err != nil {
+		return &pb.PingNodeResponse{}, ServerError.Wrap(err)
+	}
+
+	self := rt.Local()
+
+	nc, err := node.NewNodeClient(srv.identity, self, srv.dht)
+	if err != nil {
+		return &pb.PingNodeResponse{}, ServerError.Wrap(err)
+	}
+
+	p, err := nc.Ping(ctx, pb.Node{
+		Id:   req.Id,
+		Type: self.Type,
+		Address: &pb.NodeAddress{
+			Address: req.Address,
+		},
+	})
+	res := &pb.PingNodeResponse{Ok: p}
+
+	if err != nil {
+		return res, ServerError.Wrap(err)
+	}
+
+	return res, nil
+}
+
+// LookupNode triggers a Kademlia lookup and returns the node the network found.
+func (srv *Server) LookupNode(ctx context.Context, req *pb.LookupNodeRequest) (*pb.LookupNodeResponse, error) {
+	id, err := storj.NodeIDFromString(req.Id)
+	if err != nil {
+		return &pb.LookupNodeResponse{}, err
+	}
+	node, err := srv.dht.FindNode(ctx, id)
+	if err != nil {
+		return &pb.LookupNodeResponse{}, err
+	}
+
+	return &pb.LookupNodeResponse{
+		Node: &node,
+	}, nil
+}
+
 // ---------------------
 // StatDB commands:
 // ---------------------
 
 // GetStats returns the stats for a particular node ID
 func (srv *Server) GetStats(ctx context.Context, req *pb.GetStatsRequest) (*pb.GetStatsResponse, error) {
-	nodeID := node.IDFromString(req.NodeId)
 	getReq := &statsproto.GetRequest{
-		NodeId: nodeID.Bytes(),
+		NodeId: req.NodeId,
 	}
 	res, err := srv.statdb.Get(ctx, getReq)
 	if err != nil {
@@ -94,17 +157,17 @@ func (srv *Server) GetStats(ctx context.Context, req *pb.GetStatsRequest) (*pb.G
 	}
 
 	return &pb.GetStatsResponse{
-		AuditRatio:  res.Stats.AuditSuccessRatio,
-		UptimeRatio: res.Stats.UptimeRatio,
 		AuditCount:  res.Stats.AuditCount,
+		AuditRatio:  res.Stats.AuditSuccessRatio,
+		UptimeCount: res.Stats.UptimeCount,
+		UptimeRatio: res.Stats.UptimeRatio,
 	}, nil
 }
 
 // CreateStats creates a node with specified stats
 func (srv *Server) CreateStats(ctx context.Context, req *pb.CreateStatsRequest) (*pb.CreateStatsResponse, error) {
-	nodeID := node.IDFromString(req.NodeId)
 	node := &statsproto.Node{
-		NodeId: nodeID.Bytes(),
+		Id: req.NodeId,
 	}
 	stats := &statsproto.NodeStats{
 		AuditCount:         req.AuditCount,
@@ -117,6 +180,9 @@ func (srv *Server) CreateStats(ctx context.Context, req *pb.CreateStatsRequest) 
 		Stats: stats,
 	}
 	_, err := srv.statdb.Create(ctx, createReq)
+	if err != nil {
+		return nil, err
+	}
 
-	return &pb.CreateStatsResponse{}, err
+	return &pb.CreateStatsResponse{}, nil
 }

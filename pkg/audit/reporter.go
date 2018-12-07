@@ -6,48 +6,40 @@ package audit
 import (
 	"context"
 
-	"storj.io/storj/pkg/provider"
-	proto "storj.io/storj/pkg/statdb/proto"
-	"storj.io/storj/pkg/statdb/sdbclient"
+	"storj.io/storj/pkg/pb"
+	"storj.io/storj/pkg/statdb"
+	statsproto "storj.io/storj/pkg/statdb/proto"
+	"storj.io/storj/pkg/storj"
 )
 
 type reporter interface {
-	RecordAudits(ctx context.Context, failedNodes []*proto.Node) (err error)
+	RecordAudits(ctx context.Context, failedNodes []*pb.Node) (err error)
 }
 
 // Reporter records audit reports in statdb and implements the reporter interface
 type Reporter struct {
-	statdb     sdbclient.Client
+	statdb     *statdb.StatDB
 	maxRetries int
 }
 
 // NewReporter instantiates a reporter
 func NewReporter(ctx context.Context, statDBPort string, maxRetries int, apiKey string) (reporter *Reporter, err error) {
-	ca, err := provider.NewTestCA(ctx)
-	if err != nil {
-		return nil, err
-	}
-	identity, err := ca.NewIdentity()
-	if err != nil {
-		return nil, err
-	}
+	sdb := statdb.LoadFromContext(ctx)
 
-	client, err := sdbclient.NewClient(identity, statDBPort, []byte(apiKey))
-	if err != nil {
-		return nil, err
-	}
-	return &Reporter{statdb: client, maxRetries: maxRetries}, nil
+	return &Reporter{statdb: sdb, maxRetries: maxRetries}, nil
 }
 
 // RecordAudits saves failed audit details to statdb
-func (reporter *Reporter) RecordAudits(ctx context.Context, nodes []*proto.Node) (err error) {
+func (reporter *Reporter) RecordAudits(ctx context.Context, nodes []*pb.Node) (err error) {
 	retries := 0
 	for len(nodes) > 0 && retries < reporter.maxRetries {
-		_, failedNodes, err := reporter.statdb.UpdateBatch(ctx, nodes)
+		res, err := reporter.statdb.UpdateBatch(ctx, &statsproto.UpdateBatchRequest{
+			NodeList: nodes,
+		})
 		if err != nil {
 			return err
 		}
-		nodes = failedNodes
+		nodes = res.GetFailedNodes()
 		retries++
 	}
 	if retries >= reporter.maxRetries && len(nodes) > 0 {
@@ -56,10 +48,10 @@ func (reporter *Reporter) RecordAudits(ctx context.Context, nodes []*proto.Node)
 	return nil
 }
 
-func setAuditFailStatus(ctx context.Context, failedNodes []string) (failStatusNodes []*proto.Node) {
+func setAuditFailStatus(ctx context.Context, failedNodes storj.NodeIDList) (failStatusNodes []*pb.Node) {
 	for i := range failedNodes {
-		setNode := &proto.Node{
-			NodeId:             []byte(failedNodes[i]),
+		setNode := &pb.Node{
+			Id:                 failedNodes[i],
 			AuditSuccess:       false,
 			IsUp:               true,
 			UpdateAuditSuccess: true,
@@ -71,10 +63,10 @@ func setAuditFailStatus(ctx context.Context, failedNodes []string) (failStatusNo
 }
 
 // TODO: offline nodes should maybe be marked as failing the audit in the future
-func setOfflineStatus(ctx context.Context, offlineNodeIDs []string) (offlineStatusNodes []*proto.Node) {
+func setOfflineStatus(ctx context.Context, offlineNodeIDs storj.NodeIDList) (offlineStatusNodes []*pb.Node) {
 	for i := range offlineNodeIDs {
-		setNode := &proto.Node{
-			NodeId:       []byte(offlineNodeIDs[i]),
+		setNode := &pb.Node{
+			Id:           offlineNodeIDs[i],
 			IsUp:         false,
 			UpdateUptime: true,
 		}
@@ -83,10 +75,10 @@ func setOfflineStatus(ctx context.Context, offlineNodeIDs []string) (offlineStat
 	return offlineStatusNodes
 }
 
-func setSuccessStatus(ctx context.Context, offlineNodeIDs []string) (successStatusNodes []*proto.Node) {
+func setSuccessStatus(ctx context.Context, offlineNodeIDs storj.NodeIDList) (successStatusNodes []*pb.Node) {
 	for i := range offlineNodeIDs {
-		setNode := &proto.Node{
-			NodeId:             []byte(offlineNodeIDs[i]),
+		setNode := &pb.Node{
+			Id:                 offlineNodeIDs[i],
 			AuditSuccess:       true,
 			IsUp:               true,
 			UpdateAuditSuccess: true,

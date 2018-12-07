@@ -13,6 +13,7 @@ import (
 	"github.com/golang/protobuf/ptypes/timestamp"
 	"go.uber.org/zap"
 
+	"storj.io/storj/internal/memory"
 	"storj.io/storj/pkg/encryption"
 	"storj.io/storj/pkg/pb"
 	"storj.io/storj/pkg/storage/meta"
@@ -27,6 +28,20 @@ const (
 	// commitedPrefix is prefix where completed object info is stored
 	committedPrefix = "l/"
 )
+
+var defaultRS = storj.RedundancyScheme{
+	Algorithm:      storj.ReedSolomon,
+	RequiredShares: 20,
+	RepairShares:   30,
+	OptimalShares:  40,
+	TotalShares:    50,
+	ShareSize:      1 * memory.KB.Int32(),
+}
+
+var defaultES = storj.EncryptionScheme{
+	Cipher:    storj.AESGCM,
+	BlockSize: 1 * memory.KB.Int32(),
+}
 
 // GetObject returns information about an object
 func (db *DB) GetObject(ctx context.Context, bucket string, path storj.Path) (info storj.Object, err error) {
@@ -62,7 +77,47 @@ func (db *DB) GetObjectStream(ctx context.Context, bucket string, path storj.Pat
 // CreateObject creates an uploading object and returns an interface for uploading Object information
 func (db *DB) CreateObject(ctx context.Context, bucket string, path storj.Path, createInfo *storj.CreateObject) (object storj.MutableObject, err error) {
 	defer mon.Task()(&ctx)(&err)
-	return nil, errors.New("not implemented")
+
+	bucketInfo, err := db.GetBucket(ctx, bucket)
+	if err != nil {
+		return nil, err
+	}
+
+	if path == "" {
+		return nil, storj.ErrNoPath.New("")
+	}
+
+	info := storj.Object{
+		Bucket: bucketInfo,
+		Path:   path,
+	}
+
+	if createInfo != nil {
+		info.Metadata = createInfo.Metadata
+		info.ContentType = createInfo.ContentType
+		info.Expires = createInfo.Expires
+		info.RedundancyScheme = createInfo.RedundancyScheme
+		info.EncryptionScheme = createInfo.EncryptionScheme
+	}
+
+	// TODO: autodetect content type from the path extension
+	// if info.ContentType == "" {}
+
+	if info.RedundancyScheme.IsZero() {
+		info.RedundancyScheme = defaultRS
+	}
+
+	if info.EncryptionScheme.IsZero() {
+		info.EncryptionScheme = storj.EncryptionScheme{
+			Cipher:    defaultES.Cipher,
+			BlockSize: info.RedundancyScheme.ShareSize,
+		}
+	}
+
+	return &mutableObject{
+		db:   db,
+		info: info,
+	}, nil
 }
 
 // ModifyObject modifies a committed object
@@ -98,6 +153,11 @@ func (db *DB) ListPendingObjects(ctx context.Context, bucket string, options sto
 // ListObjects lists objects in bucket based on the ListOptions
 func (db *DB) ListObjects(ctx context.Context, bucket string, options storj.ListOptions) (list storj.ObjectList, err error) {
 	defer mon.Task()(&ctx)(&err)
+
+	bucketInfo, err := db.GetBucket(ctx, bucket)
+	if err != nil {
+		return storj.ObjectList{}, err
+	}
 
 	objects, err := db.buckets.GetObjectStore(ctx, bucket)
 	if err != nil {
@@ -140,7 +200,7 @@ func (db *DB) ListObjects(ctx context.Context, bucket string, options storj.List
 	}
 
 	for _, item := range items {
-		list.Items = append(list.Items, objectFromMeta("", item.Path, item.IsPrefix, item.Meta))
+		list.Items = append(list.Items, objectFromMeta(bucketInfo, item.Path, item.IsPrefix, item.Meta))
 	}
 
 	return list, nil
@@ -163,7 +223,7 @@ func (db *DB) getInfo(ctx context.Context, prefix string, bucket string, path st
 	}
 
 	if path == "" {
-		return object{}, storj.Object{}, storage.ErrEmptyKey.New("")
+		return object{}, storj.Object{}, storj.ErrNoPath.New("")
 	}
 
 	fullpath := bucket + "/" + path
@@ -173,7 +233,7 @@ func (db *DB) getInfo(ctx context.Context, prefix string, bucket string, path st
 		return object{}, storj.Object{}, err
 	}
 
-	pointer, _, err := db.pointers.Get(ctx, prefix+encryptedPath)
+	pointer, _, _, err := db.pointers.Get(ctx, prefix+encryptedPath)
 	if err != nil {
 		if storage.ErrKeyNotFound.Has(err) {
 			err = storj.ErrObjectNotFound.Wrap(err)
@@ -220,7 +280,7 @@ func (db *DB) getInfo(ctx context.Context, prefix string, bucket string, path st
 		return object{}, storj.Object{}, err
 	}
 
-	info = objectStreamFromMeta(bucket, path, lastSegmentMeta, streamInfo, streamMeta, redundancyScheme)
+	info = objectStreamFromMeta(bucketInfo, path, lastSegmentMeta, streamInfo, streamMeta, redundancyScheme)
 
 	return object{
 		fullpath:        fullpath,
@@ -231,7 +291,7 @@ func (db *DB) getInfo(ctx context.Context, prefix string, bucket string, path st
 	}, info, nil
 }
 
-func objectFromMeta(bucket string, path storj.Path, isPrefix bool, meta objects.Meta) storj.Object {
+func objectFromMeta(bucket storj.Bucket, path storj.Path, isPrefix bool, meta objects.Meta) storj.Object {
 	return storj.Object{
 		Version:  0, // TODO:
 		Bucket:   bucket,
@@ -252,7 +312,7 @@ func objectFromMeta(bucket string, path storj.Path, isPrefix bool, meta objects.
 	}
 }
 
-func objectStreamFromMeta(bucket string, path storj.Path, lastSegment segments.Meta, stream pb.StreamInfo, streamMeta pb.StreamMeta, redundancyScheme *pb.RedundancyScheme) storj.Object {
+func objectStreamFromMeta(bucket storj.Bucket, path storj.Path, lastSegment segments.Meta, stream pb.StreamInfo, streamMeta pb.StreamMeta, redundancyScheme *pb.RedundancyScheme) storj.Object {
 	var nonce storj.Nonce
 	copy(nonce[:], streamMeta.LastSegmentMeta.KeyNonce)
 	return storj.Object{
@@ -277,7 +337,7 @@ func objectStreamFromMeta(bucket string, path storj.Path, lastSegment segments.M
 
 			RedundancyScheme: storj.RedundancyScheme{
 				Algorithm:      storj.ReedSolomon,
-				ShareSize:      int64(redundancyScheme.GetErasureShareSize()),
+				ShareSize:      redundancyScheme.GetErasureShareSize(),
 				RequiredShares: int16(redundancyScheme.GetMinReq()),
 				RepairShares:   int16(redundancyScheme.GetRepairThreshold()),
 				OptimalShares:  int16(redundancyScheme.GetSuccessThreshold()),
@@ -306,4 +366,31 @@ func convertTime(ts *timestamp.Timestamp) time.Time {
 		zap.S().Warnf("Failed converting timestamp %v: %v", ts, err)
 	}
 	return t
+}
+
+type mutableObject struct {
+	db   *DB
+	info storj.Object
+}
+
+func (object *mutableObject) Info() storj.Object { return object.info }
+
+func (object *mutableObject) CreateStream(ctx context.Context) (storj.MutableStream, error) {
+	return &mutableStream{
+		db:   object.db,
+		info: object.info,
+	}, nil
+}
+
+func (object *mutableObject) ContinueStream(ctx context.Context) (storj.MutableStream, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (object *mutableObject) DeleteStream(ctx context.Context) error {
+	return errors.New("not implemented")
+}
+
+func (object *mutableObject) Commit(ctx context.Context) error {
+	// Do nothing for now - the object will be committed to PointerDB with Upload.Close
+	return nil
 }

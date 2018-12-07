@@ -58,7 +58,8 @@ goimports-fix: ## Applies goimports to every go file (excluding vendored files)
 .PHONY: proto
 proto: ## Rebuild protobuf files
 	@echo "Running ${@}"
-	./scripts/build-protos.sh
+	go run scripts/protobuf.go install
+	go run scripts/protobuf.go generate
 
 ##@ Test
 
@@ -80,19 +81,20 @@ test-docker: ## Run tests in Docker
 .PHONY: all-in-one
 all-in-one: ## Deploy docker images with one storagenode locally
 	if [ -z "${VERSION}" ]; then \
-		$(MAKE) images -j 3 \
+		$(MAKE) satellite-image storagenode-image gateway-image -j 3 \
 		&& export VERSION="${TAG}"; \
 	fi \
-	&& docker-compose up -d storagenode \
-	&& scripts/fix-mock-overlay \
-	&& docker-compose up storagenode satellite uplink
+	&& docker-compose up storagenode satellite gateway
 
 ##@ Build
 
 .PHONY: images
-images: satellite-image storagenode-image uplink-image ## Build satellite, storagenode, and uplink Docker images
+images: satellite-image storagenode-image uplink-image gateway-image ## Build gateway, satellite, storagenode, and uplink Docker images
 	echo Built version: ${TAG}
 
+.PHONY: gateway-image
+gateway-image: ## Build gateway Docker image
+	${DOCKER_BUILD} -t storjlabs/gateway:${TAG}${CUSTOMTAG} -f cmd/gateway/Dockerfile .
 .PHONY: satellite-image
 satellite-image: ## Build satellite Docker image
 	${DOCKER_BUILD} -t storjlabs/satellite:${TAG}${CUSTOMTAG} -f cmd/satellite/Dockerfile .
@@ -111,14 +113,14 @@ binary:
 	mkdir -p release/${TAG}
 	rm -f cmd/${COMPONENT}/resource.syso
 	if [ "${GOARCH}" = "amd64" ]; then sixtyfour="-64"; fi; \
-	goversioninfo $$sixtyfour -o cmd/${COMPONENT}/resource.syso \
+	[ "${GOARCH}" = "amd64" ] && goversioninfo $$sixtyfour -o cmd/${COMPONENT}/resource.syso \
 	-original-name ${COMPONENT}_${GOOS}_${GOARCH}${FILEEXT} \
 	-description "${COMPONENT} program for Storj" \
 	-product-ver-build 2 -ver-build 2 \
 	-product-version "alpha2" \
 	resources/versioninfo.json || echo "goversioninfo is not installed, metadata will not be created"
 	tar -c . | docker run --rm -i -e TAR=1 -e GO111MODULE=on \
-	-e GOOS=${GOOS} -e GOARCH=${GOARCH} -e CGO_ENABLED=1 \
+	-e GOOS=${GOOS} -e GOARCH=${GOARCH} -e GOARM=6 -e CGO_ENABLED=1 \
 	-w /go/src/storj.io/storj -e GOPROXY storjlabs/golang \
 	-o app storj.io/storj/cmd/${COMPONENT} \
 	| tar -O -x ./app > release/${TAG}/$(COMPONENT)_${GOOS}_${GOARCH}${FILEEXT}
@@ -142,7 +144,7 @@ uplink_%:
 	GOOS=$(word 2, $(subst _, ,$@)) GOARCH=$(word 3, $(subst _, ,$@)) COMPONENT=uplink $(MAKE) binary
 
 COMPONENTLIST := gateway satellite storagenode uplink
-OSARCHLIST    := linux_amd64 windows_amd64 darwin_amd64
+OSARCHLIST    := darwin_amd64 linux_amd64 linux_arm windows_amd64
 BINARIES      := $(foreach C,$(COMPONENTLIST),$(foreach O,$(OSARCHLIST),$C_$O))
 .PHONY: binaries
 binaries: ${BINARIES} ## Build gateway, satellite, storagenode, and uplink binaries (jenkins)
