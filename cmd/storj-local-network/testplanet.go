@@ -6,8 +6,10 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
+	"os/exec"
 	"time"
 
+	"storj.io/storj/internal/processgroup"
 	"storj.io/storj/internal/testplanet"
 	"storj.io/storj/pkg/peertls"
 	"storj.io/storj/pkg/utils"
@@ -23,6 +25,7 @@ func runTestPlanet(flags *Flags, args []string) error {
 	}
 
 	planet.Start(ctx)
+	// wait a bit for kademlia to start
 	time.Sleep(time.Second * 2)
 
 	var env = os.Environ()
@@ -66,5 +69,12 @@ func runTestPlanet(flags *Flags, args []string) error {
 		)
 	}
 
-	return planet.Shutdown()
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	cmd.Env = env
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	processgroup.Setup(cmd)
+
+	errRun := cmd.Run()
+
+	return utils.CombineErrors(errRun, planet.Shutdown())
 }
