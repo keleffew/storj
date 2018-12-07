@@ -12,57 +12,63 @@ import (
 	"storj.io/storj/pkg/process"
 )
 
-type Config struct {
+type Flags struct {
 	Directory string
 
 	SatelliteCount   int
 	StorageNodeCount int
-
-	Exec string
+	Identities     int
 }
 
 func main() {
-	var config Config
+	var flags Flags
 
 	rootCmd := &cobra.Command{
 		Use:   "storj-local-network",
 		Short: "Storj Local Network",
 	}
 
-	rootCmd.PersistentFlags().StringVarP(&config.Directory, "dir", "", fpath.ApplicationDir("storj", "local-network"), "base project directory")
+	rootCmd.PersistentFlags().StringVarP(&flags.Directory, "dir", "", fpath.ApplicationDir("storj", "local-network"), "base project directory")
 
-	rootCmd.PersistentFlags().IntVarP(&config.SatelliteCount, "satellites", "", 1, "number of satellites to start")
-	rootCmd.PersistentFlags().IntVarP(&config.StorageNodeCount, "storage-nodes", "", 100, "number of storage nodes to start")
+	rootCmd.PersistentFlags().IntVarP(&flags.SatelliteCount, "satellites", "", 1, "number of satellites to start")
+	rootCmd.PersistentFlags().IntVarP(&flags.StorageNodeCount, "storage-nodes", "", 10, "number of storage nodes to start")
+	rootCmd.PersistentFlags().IntVarP(&flags.Identities, "identities", "", 10, "number of identities to create")
 
-	rootCmd.PersistentFlags().StringVarP(&config.Exec, "exec", "", "", "execute the given program when all the peers have started")
-
-	exec := func(cmd *cobra.Command, args []string, command string) error {
-		processes, err := NewProcesses(config.Directory, 1, 100)
-		if err != nil {
-			return err
-		}
-
-		ctx, cleanup := NewCLIContext(context.Background())
-		defer cleanup()
-
-		return processes.Exec(ctx, command)
-	}
-
+	
 	rootCmd.AddCommand(
 		&cobra.Command{
 			Use:   "run",
 			Short: "run peers",
 			RunE: func(cmd *cobra.Command, args []string) (err error) {
-				return exec(cmd, args, "run")
+				return exec(&flags, args, "run")
 			},
 		}, &cobra.Command{
 			Use:   "setup",
 			Short: "setup peers",
 			RunE: func(cmd *cobra.Command, args []string) (err error) {
-				return exec(cmd, args, "setup")
+				return exec(&flags, args, "setup")
 			},
-		},
+		}, &cobra.Command{
+			Use: "testplanet <command>",
+			Short: "run command with a testplanet",
+			Args:  cobra.MinimumNArgs(1),
+			RunE: func(cmd *cobra.Command, args []string) (err error) {
+				return runTestPlanet(args)
+			},
+		}
 	)
 
 	process.Exec(rootCmd)
+}
+
+func exec(flags *Flags, args []string, command string) error {
+	processes, err := NewProcesses(flags.Directory, flags.SatelliteCount, flags.StorageNodeCount)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := NewCLIContext(context.Background())
+	defer cancel()
+
+	return processes.Exec(ctx, command)
 }
