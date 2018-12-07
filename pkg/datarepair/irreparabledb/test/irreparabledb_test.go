@@ -1,17 +1,29 @@
 // Copyright (C) 2018 Storj Labs, Inc.
 // See LICENSE for copying information.
 
-package satellitedb
+package irreparabledb_test
 
 import (
 	"context"
+	"flag"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 
 	"storj.io/storj/internal/testcontext"
-	"storj.io/storj/pkg/datarepair"
+	"storj.io/storj/pkg/datarepair/irreparabledb"
+	"storj.io/storj/satellite/satellitedb"
+)
+
+const (
+	// this connstring is expected to work under the storj-test docker-compose instance
+	defaultPostgresConn = "postgres://storj:storj-pass@test-postgres/teststorj?sslmode=disable"
+)
+
+var (
+	testPostgres = flag.String("postgres-test-db", os.Getenv("STORJ_POSTGRES_TEST"), "PostgreSQL test database connection string")
 )
 
 func TestPostgres(t *testing.T) {
@@ -23,7 +35,7 @@ func TestPostgres(t *testing.T) {
 	defer ctx.Cleanup()
 
 	// creating in-memory db and opening connection
-	db, err := NewDB(*testPostgres)
+	db, err := satellitedb.NewDB(*testPostgres)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,10 +43,7 @@ func TestPostgres(t *testing.T) {
 
 	err = db.CreateTables()
 	assert.NoError(t, err)
-
-	irrdb := db.Irreparable()
-
-	testDatabase(ctx, t, irrdb)
+	testDatabase(ctx, t, db.Irreparabledb())
 }
 
 func TestSqlite3(t *testing.T) {
@@ -42,7 +51,7 @@ func TestSqlite3(t *testing.T) {
 	defer ctx.Cleanup()
 
 	// creating in-memory db and opening connection
-	db, err := NewDB("sqlite3://file::memory:?mode=memory&cache=shared")
+	db, err := satellitedb.NewDB("sqlite3://file::memory:?mode=memory&cache=shared")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,15 +59,12 @@ func TestSqlite3(t *testing.T) {
 
 	err = db.CreateTables()
 	assert.NoError(t, err)
-
-	irrdb := db.Irreparable()
-
-	testDatabase(ctx, t, irrdb)
+	testDatabase(ctx, t, db.Irreparabledb())
 }
 
-func testDatabase(ctx context.Context, t *testing.T, irrdb datarepair.IrreparableDB) {
+func testDatabase(ctx context.Context, t *testing.T, irrdb irreparabledb.DB) {
 	//testing variables
-	segmentInfo := &datarepair.RemoteSegmentInfo{
+	segmentInfo := &irreparabledb.RemoteSegmentInfo{
 		EncryptedSegmentPath:   []byte("IamSegmentkeyinfo"),
 		EncryptedSegmentDetail: []byte("IamSegmentdetailinfo"),
 		LostPiecesCount:        int64(10),

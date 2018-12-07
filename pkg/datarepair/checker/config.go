@@ -10,7 +10,7 @@ import (
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 
-	"storj.io/storj/pkg/datarepair"
+	"storj.io/storj/pkg/datarepair/irreparabledb"
 	"storj.io/storj/pkg/datarepair/queue"
 	"storj.io/storj/pkg/overlay"
 	"storj.io/storj/pkg/pointerdb"
@@ -39,7 +39,7 @@ func (c Config) initialize(ctx context.Context) (Checker, error) {
 	}
 
 	db, ok := ctx.Value("masterdb").(interface {
-		Irreparable() datarepair.IrreparableDB
+		Irreparabledb() irreparabledb.DB
 	})
 	if !ok {
 		return nil, errs.New("unable to get master db instance")
@@ -50,7 +50,7 @@ func (c Config) initialize(ctx context.Context) (Checker, error) {
 		return nil, Error.Wrap(err)
 	}
 	repairQueue := queue.NewQueue(redisQ)
-	return newChecker(pdb, sdb, repairQueue, o, irrdb, 0, zap.L(), c.Interval), nil
+	return newChecker(pdb, sdb, repairQueue, o, db.Irreparabledb(), 0, zap.L(), c.Interval), nil
 }
 
 // Run runs the checker with configured values

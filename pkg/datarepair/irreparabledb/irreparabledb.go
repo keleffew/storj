@@ -5,15 +5,10 @@ package irreparabledb
 
 import (
 	"context"
-
-	"github.com/zeebo/errs"
 )
 
-// Error is the default irreparabledb errs class
-var Error = errs.Class("irreparabledb error")
-
-// IrreparableDB interface for database operations
-type IrreparableDB interface {
+// DB interface for database operations
+type DB interface {
 	// IncrementRepairAttempts increments the repair attempt
 	IncrementRepairAttempts(context.Context, *RemoteSegmentInfo) error
 	// Get a irreparable's segment info from the db
@@ -22,12 +17,7 @@ type IrreparableDB interface {
 	Delete(ctx context.Context, segmentPath []byte) error
 }
 
-// Database implements the irreparabledb services
-type Database struct {
-	db IrreparableDB
-}
-
-// RemoteSegmentInfo is info about a single entry stored in the irreparable db
+// RemoteSegmentInfo is info about a single entry stored in the irreparabledb
 type RemoteSegmentInfo struct {
 	EncryptedSegmentPath   []byte
 	EncryptedSegmentDetail []byte //contains marshaled info of pb.Pointer
