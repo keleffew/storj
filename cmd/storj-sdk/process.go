@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"storj.io/storj/internal/processgroup"
+	"storj.io/storj/pkg/utils"
 )
 
 // Processes contains list of processes
@@ -32,7 +34,10 @@ func NewProcesses(dir string, satelliteCount, storageNodeCount int) (*Processes,
 			return nil, err
 		}
 
-		process := NewProcess(name, "satellite", dir)
+		process, err := NewProcess(name, "satellite", dir)
+		if err != nil {
+			return nil, utils.CombineErrors(err, processes.Close())
+		}
 		processes.List = append(processes.List, process)
 
 		process.Arguments["run"] = []string{"run", "--base-path", "."}
@@ -47,7 +52,10 @@ func NewProcesses(dir string, satelliteCount, storageNodeCount int) (*Processes,
 			return nil, err
 		}
 
-		process := NewProcess(name, "storagenode", dir)
+		process, err := NewProcess(name, "storagenode", dir)
+		if err != nil {
+			return nil, utils.CombineErrors(err, processes.Close())
+		}
 		processes.List = append(processes.List, process)
 
 		process.Arguments["run"] = []string{"run", "--base-path", "."}
@@ -62,16 +70,24 @@ func (processes *Processes) Exec(ctx context.Context, command string) error {
 	var group errgroup.Group
 	for _, p := range processes.List {
 		process := p
-
-		process.Stdout.Hook(os.Stdout)
-		process.Stderr.Hook(os.Stderr)
-
 		group.Go(func() error {
 			return process.Exec(ctx, command)
 		})
 	}
 
 	return group.Wait()
+}
+
+// Close closes all the processes and their resources
+func (processes *Processes) Close() error {
+	var errs []error
+	for _, process := range processes.List {
+		err := process.Close()
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return utils.CombineErrors(errs...)
 }
 
 // Process is a type for monitoring the process
@@ -82,29 +98,48 @@ type Process struct {
 
 	Arguments map[string][]string
 
-	Stdout Buffer
-	Stderr Buffer
+	Stdout io.Writer
+	Stderr io.Writer
+
+	stdout *os.File
+	stderr *os.File
 }
 
 // NewProcess creates a process which can be run in the specified directory
-func NewProcess(name, executable, directory string) *Process {
+func NewProcess(name, executable, directory string) (*Process, error) {
+	stdout, err1 := os.OpenFile(filepath.Join(directory, "stderr.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	stderr, err2 := os.OpenFile(filepath.Join(directory, "stdout.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+
 	return &Process{
 		Name:       name,
 		Directory:  directory,
 		Executable: executable,
 
 		Arguments: map[string][]string{},
-	}
+
+		Stdout: io.MultiWriter(os.Stdout, stdout),
+		Stderr: io.MultiWriter(os.Stderr, stderr),
+
+		stdout: stdout,
+		stderr: stderr,
+	}, utils.CombineErrors(err1, err2)
 }
 
 // Exec runs the process using the arguments for a given command
 func (process *Process) Exec(ctx context.Context, command string) error {
 	cmd := exec.Command(process.Executable, process.Arguments[command]...)
 	cmd.Dir = process.Directory
-	cmd.Stdout, cmd.Stderr = &process.Stdout, &process.Stderr
+	cmd.Stdout, cmd.Stderr = process.Stdout, process.Stderr
 
 	processgroup.Setup(cmd)
 
-	err := cmd.Run()
-	return err
+	return cmd.Run()
+}
+
+// Close closes process resources
+func (process *Process) Close() error {
+	return utils.CombineErrors(
+		process.stdout.Close(),
+		process.stderr.Close(),
+	)
 }

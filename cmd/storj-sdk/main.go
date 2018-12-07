@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"storj.io/storj/internal/fpath"
+	"storj.io/storj/pkg/utils"
 )
 
 // Flags contains different flags for commands
@@ -87,5 +88,8 @@ func runProcesses(flags *Flags, args []string, command string) error {
 	ctx, cancel := NewCLIContext(context.Background())
 	defer cancel()
 
-	return processes.Exec(ctx, command)
+	err = processes.Exec(ctx, command)
+	closeErr := processes.Close()
+
+	return utils.CombineErrors(err, closeErr)
 }
