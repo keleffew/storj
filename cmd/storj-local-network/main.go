@@ -17,6 +17,8 @@ type Config struct {
 
 	SatelliteCount   int
 	StorageNodeCount int
+
+	Exec string
 }
 
 func main() {
@@ -31,6 +33,8 @@ func main() {
 
 	rootCmd.PersistentFlags().IntVarP(&config.SatelliteCount, "satellites", "", 1, "number of satellites to start")
 	rootCmd.PersistentFlags().IntVarP(&config.StorageNodeCount, "storage-nodes", "", 100, "number of storage nodes to start")
+
+	rootCmd.PersistentFlags().StringVarP(&config.Exec, "exec", "", "", "execute the given program when all the peers have started")
 
 	exec := func(cmd *cobra.Command, args []string, command string) error {
 		processes, err := NewProcesses(config.Directory, 1, 100)
