@@ -12,6 +12,7 @@ import (
 	"storj.io/storj/internal/fpath"
 )
 
+// Flags contains different flags for commands
 type Flags struct {
 	Directory string
 
@@ -62,7 +63,7 @@ func main() {
 		Short: "run command with a in-memory network",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
-			return runTestPlanet(&flags, args)
+			return runTestPlanet(&flags, args[0], args[1:])
 		},
 	}
 
