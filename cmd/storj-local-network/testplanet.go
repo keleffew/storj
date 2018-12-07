@@ -59,15 +59,15 @@ func runTestPlanet(flags *Flags, args []string) error {
 			return utils.CombineErrors(errLeaf, errCA, planet.Shutdown())
 		}
 
-		// var key bytes.Buffer
-		// errKey := peertls.WriteKey(&key, peertls.NewKeyBlock(identity.Key))
-		// if errKey != nil {
-		// 	return utils.CombineErrors(errKey, planet.Shutdown())
-		// }
+		var key bytes.Buffer
+		errKey := peertls.WriteKey(&key, identity.Key)
+		if errKey != nil {
+			return utils.CombineErrors(errKey, planet.Shutdown())
+		}
 
 		env = append(env,
 			fmt.Sprintf("IDENTITY%d_ID=%v", i, identity.ID.String()),
-			//fmt.Sprintf("IDENTITY%d_KEY=%v", i, base64.StdEncoding.EncodeToString(key.Bytes())),
+			fmt.Sprintf("IDENTITY%d_KEY=%v", i, base64.StdEncoding.EncodeToString(key.Bytes())),
 			fmt.Sprintf("IDENTITY%d_CHAIN=%v", i, base64.StdEncoding.EncodeToString(chainPEM.Bytes())),
 		)
 	}
