@@ -12,10 +12,6 @@ import (
 	"storj.io/storj/pkg/process"
 )
 
-var (
-	defaultDir = "local-network"
-)
-
 type Config struct {
 	Directory string
 
@@ -31,10 +27,10 @@ func main() {
 		Short: "Storj Local Network",
 	}
 
-	rootCmd.PersistentFlags().StringVarP(&config.Directory, "base", "b", fpath.ApplicationDir("storj", "local-network"), "base project directory")
+	rootCmd.PersistentFlags().StringVarP(&config.Directory, "dir", "", fpath.ApplicationDir("storj", "local-network"), "base project directory")
 
-	rootCmd.PersistentFlags().IntVarP(&config.SatelliteCount, "", "b", fpath.ApplicationDir("storj", "local-network"), "base project directory")
-	rootCmd.PersistentFlags().IntVarP(&config.StorageNodeCount, "base", "b", fpath.ApplicationDir("storj", "local-network"), "base project directory")
+	rootCmd.PersistentFlags().IntVarP(&config.SatelliteCount, "satellites", "", 1, "number of satellites to start")
+	rootCmd.PersistentFlags().IntVarP(&config.StorageNodeCount, "storage-nodes", "", 100, "number of storage nodes to start")
 
 	exec := func(cmd *cobra.Command, args []string, command string) error {
 		processes, err := NewProcesses(config.Directory, 1, 100)

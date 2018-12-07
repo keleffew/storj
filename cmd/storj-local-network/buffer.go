@@ -6,6 +6,7 @@ import (
 	"sync"
 )
 
+// Buffer implements a hookable io.Writer
 type Buffer struct {
 	mu     sync.Mutex
 	data   bytes.Buffer

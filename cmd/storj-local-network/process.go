@@ -86,6 +86,7 @@ type Process struct {
 	Stderr Buffer
 }
 
+// NewProcess creates a process which can be run in the specified directory
 func NewProcess(name, executable, directory string) *Process {
 	return &Process{
 		Name:       name,
@@ -96,6 +97,7 @@ func NewProcess(name, executable, directory string) *Process {
 	}
 }
 
+// Exec runs the process using the arguments for a given command
 func (process *Process) Exec(ctx context.Context, command string) error {
 	cmd := exec.Command(process.Executable, process.Arguments[command]...)
 	cmd.Dir = process.Directory
