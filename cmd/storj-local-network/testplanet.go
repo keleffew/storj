@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"time"
 
+	"go.uber.org/zap"
+
 	"storj.io/storj/internal/processgroup"
 	"storj.io/storj/internal/testplanet"
 	"storj.io/storj/pkg/peertls"
@@ -20,7 +22,7 @@ func runTestPlanet(flags *Flags, args []string) error {
 	ctx, cancel := NewCLIContext(context.Background())
 	defer cancel()
 
-	planet, err := testplanet.New(ctx, flags.SatelliteCount, flags.SatelliteCount, 0)
+	planet, err := testplanet.NewWithLogger(zap.L(), flags.SatelliteCount, flags.StorageNodeCount, 0)
 	if err != nil {
 		return err
 	}
@@ -57,15 +59,15 @@ func runTestPlanet(flags *Flags, args []string) error {
 			return utils.CombineErrors(errLeaf, errCA, planet.Shutdown())
 		}
 
-		var key bytes.Buffer
-		errKey := peertls.WriteKey(&key, peertls.NewKeyBlock(identity.Key.Bytes()))
-		if errKey != nil {
-			return utils.CombineErrors(errKey, planet.Shutdown())
-		}
+		// var key bytes.Buffer
+		// errKey := peertls.WriteKey(&key, peertls.NewKeyBlock(identity.Key))
+		// if errKey != nil {
+		// 	return utils.CombineErrors(errKey, planet.Shutdown())
+		// }
 
 		env = append(env,
 			fmt.Sprintf("IDENTITY%d_ID=%v", i, identity.ID.String()),
-			fmt.Sprintf("IDENTITY%d_KEY=%v", i, base64.StdEncoding.EncodeToString(errKey.Bytes())),
+			//fmt.Sprintf("IDENTITY%d_KEY=%v", i, base64.StdEncoding.EncodeToString(key.Bytes())),
 			fmt.Sprintf("IDENTITY%d_CHAIN=%v", i, base64.StdEncoding.EncodeToString(chainPEM.Bytes())),
 		)
 	}
