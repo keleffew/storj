@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"os"
@@ -50,8 +51,8 @@ func runTestPlanet(flags *Flags, args []string) error {
 		}
 
 		var chainPEM bytes.Buffer
-		errLeaf := pem.Encode(chainPEM, peertls.NewCertBlock(identity.Leaf.Raw))
-		errCA := pem.Encode(chainPEM, peertls.NewCertBlock(identity.CA.Raw))
+		errLeaf := pem.Encode(&chainPEM, peertls.NewCertBlock(identity.Leaf.Raw))
+		errCA := pem.Encode(&chainPEM, peertls.NewCertBlock(identity.CA.Raw))
 		if errLeaf != nil || errCA != nil {
 			return utils.CombineErrors(errLeaf, errCA, planet.Shutdown())
 		}
@@ -64,8 +65,8 @@ func runTestPlanet(flags *Flags, args []string) error {
 
 		env = append(env,
 			fmt.Sprintf("IDENTITY%d_ID=%v", i, identity.ID.String()),
-			fmt.Sprintf("IDENTITY%d_KEY=%v", i, base64.EncodeToString(errKey.Bytes())),
-			fmt.Sprintf("IDENTITY%d_CHAIN=%v", i, base64.EncodeToString(chainPEM.Bytes())),
+			fmt.Sprintf("IDENTITY%d_KEY=%v", i, base64.StdEncoding.EncodeToString(errKey.Bytes())),
+			fmt.Sprintf("IDENTITY%d_CHAIN=%v", i, base64.StdEncoding.EncodeToString(chainPEM.Bytes())),
 		)
 	}
 

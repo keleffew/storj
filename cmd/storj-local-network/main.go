@@ -17,7 +17,7 @@ type Flags struct {
 
 	SatelliteCount   int
 	StorageNodeCount int
-	Identities     int
+	Identities       int
 }
 
 func main() {
@@ -34,34 +34,33 @@ func main() {
 	rootCmd.PersistentFlags().IntVarP(&flags.StorageNodeCount, "storage-nodes", "", 10, "number of storage nodes to start")
 	rootCmd.PersistentFlags().IntVarP(&flags.Identities, "identities", "", 10, "number of identities to create")
 
-	
 	rootCmd.AddCommand(
 		&cobra.Command{
 			Use:   "run",
 			Short: "run peers",
 			RunE: func(cmd *cobra.Command, args []string) (err error) {
-				return exec(&flags, args, "run")
+				return runProcesses(&flags, args, "run")
 			},
 		}, &cobra.Command{
 			Use:   "setup",
 			Short: "setup peers",
 			RunE: func(cmd *cobra.Command, args []string) (err error) {
-				return exec(&flags, args, "setup")
+				return runProcesses(&flags, args, "setup")
 			},
 		}, &cobra.Command{
-			Use: "testplanet <command>",
+			Use:   "testplanet <command>",
 			Short: "run command with a testplanet",
 			Args:  cobra.MinimumNArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) (err error) {
-				return runTestPlanet(args)
+				return runTestPlanet(&flags, args)
 			},
-		}
+		},
 	)
 
 	process.Exec(rootCmd)
 }
 
-func exec(flags *Flags, args []string, command string) error {
+func runProcesses(flags *Flags, args []string, command string) error {
 	processes, err := NewProcesses(flags.Directory, flags.SatelliteCount, flags.StorageNodeCount)
 	if err != nil {
 		return err
