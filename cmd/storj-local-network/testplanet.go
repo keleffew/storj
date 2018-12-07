@@ -76,6 +76,7 @@ func runTestPlanet(flags *Flags, args []string) error {
 		)
 	}
 
+	// run the specified program
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Env = env
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
