@@ -15,29 +15,50 @@ import (
 	"storj.io/storj/internal/processgroup"
 )
 
+// Processes contains list of processes
 type Processes struct {
 	List []*Process
 }
 
-func NewProcesses(satelliteCount, storageNode int) *Processes {
+// NewProcesses creates a process-set with satellites and storage nodes
+func NewProcesses(dir string, satelliteCount, storageNodeCount int) (*Processes, error) {
 	processes := &Processes{}
 
 	for i := 0; i < satelliteCount; i++ {
 		name := fmt.Sprintf("satellite/%d", i)
-		process := NewProcess(name, "satellite", filepath.Join(".", defaultDir, "satellite", fmt.Sprint(i)))
+
+		dir := filepath.Join(dir, "satellite", fmt.Sprint(i))
+		if err := os.MkdirAll(dir, 0644); err != nil {
+			return nil, err
+		}
+
+		process := NewProcess(name, "satellite", dir)
 		processes.List = append(processes.List, process)
+
+		process.Arguments["run"] = []string{"run", "--base-path", "."}
+		process.Arguments["setup"] = []string{"--base-path", ".", "--overwrite"}
 	}
 
-	for i := 0; i < storageNode; i++ {
+	for i := 0; i < storageNodeCount; i++ {
 		name := fmt.Sprintf("storage/%d", i)
-		process := NewProcess(name, "storagenode", filepath.Join(".", defaultDir, "storagenode", fmt.Sprint(i)))
+
+		dir := filepath.Join(dir, "storagenode", fmt.Sprint(i))
+		if err := os.MkdirAll(dir, 0644); err != nil {
+			return nil, err
+		}
+
+		process := NewProcess(name, "storagenode", dir)
 		processes.List = append(processes.List, process)
+
+		process.Arguments["run"] = []string{"run", "--base-path", "."}
+		process.Arguments["setup"] = []string{"--base-path", ".", "--overwrite"}
 	}
 
-	return processes
+	return processes, nil
 }
 
-func (processes *Processes) all(fn func(process *Process) error) error {
+// Exec executes a command on all processes
+func (processes *Processes) Exec(ctx context.Context, command string) error {
 	var group errgroup.Group
 	for _, p := range processes.List {
 		process := p
@@ -46,55 +67,37 @@ func (processes *Processes) all(fn func(process *Process) error) error {
 		process.Stderr.Hook(os.Stderr)
 
 		group.Go(func() error {
-			return fn(process)
+			return process.Exec(ctx, command)
 		})
 	}
+
 	return group.Wait()
 }
 
-func (processes *Processes) Run(ctx context.Context) error {
-	return processes.all(func(process *Process) error {
-		return process.Run(ctx)
-	})
-}
-
-func (processes *Processes) Setup(ctx context.Context) error {
-	return processes.all(func(process *Process) error {
-		return process.Setup(ctx)
-	})
-}
-
+// Process is a type for monitoring the process
 type Process struct {
 	Name       string
 	Directory  string
 	Executable string
+
+	Arguments map[string][]string
 
 	Stdout Buffer
 	Stderr Buffer
 }
 
 func NewProcess(name, executable, directory string) *Process {
-	os.MkdirAll(directory, 0644)
 	return &Process{
 		Name:       name,
 		Directory:  directory,
 		Executable: executable,
+
+		Arguments: map[string][]string{},
 	}
 }
 
-func (process *Process) Run(ctx context.Context) error {
-	cmd := exec.Command(process.Executable, "run", "--base-path", ".")
-	cmd.Dir = process.Directory
-	cmd.Stdout, cmd.Stderr = &process.Stdout, &process.Stderr
-
-	processgroup.Setup(cmd)
-
-	err := cmd.Run()
-	return err
-}
-
-func (process *Process) Setup(ctx context.Context) error {
-	cmd := exec.Command(process.Executable, "setup", "--base-path", ".", "--overwrite")
+func (process *Process) Exec(ctx context.Context, command string) error {
+	cmd := exec.Command(process.Executable, process.Arguments[command]...)
 	cmd.Dir = process.Directory
 	cmd.Stdout, cmd.Stderr = &process.Stdout, &process.Stderr
 
