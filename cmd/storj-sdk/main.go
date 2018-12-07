@@ -5,11 +5,11 @@ package main
 
 import (
 	"context"
+	"os"
 
 	"github.com/spf13/cobra"
 
 	"storj.io/storj/internal/fpath"
-	"storj.io/storj/pkg/process"
 )
 
 type Flags struct {
@@ -21,6 +21,8 @@ type Flags struct {
 }
 
 func main() {
+	cobra.EnableCommandSorting = false
+
 	var flags Flags
 
 	rootCmd := &cobra.Command{
@@ -34,7 +36,12 @@ func main() {
 	rootCmd.PersistentFlags().IntVarP(&flags.StorageNodeCount, "storage-nodes", "", 10, "number of storage nodes to start")
 	rootCmd.PersistentFlags().IntVarP(&flags.Identities, "identities", "", 10, "number of identities to create")
 
-	rootCmd.AddCommand(
+	networkCmd := &cobra.Command{
+		Use:   "network",
+		Short: "local network for testing",
+	}
+
+	networkCmd.AddCommand(
 		&cobra.Command{
 			Use:   "run",
 			Short: "run peers",
@@ -47,17 +54,27 @@ func main() {
 			RunE: func(cmd *cobra.Command, args []string) (err error) {
 				return runProcesses(&flags, args, "setup")
 			},
-		}, &cobra.Command{
-			Use:   "testplanet <command>",
-			Short: "run command with a testplanet",
-			Args:  cobra.MinimumNArgs(1),
-			RunE: func(cmd *cobra.Command, args []string) (err error) {
-				return runTestPlanet(&flags, args)
-			},
 		},
 	)
 
-	process.Exec(rootCmd)
+	testCmd := &cobra.Command{
+		Use:   "test <command>",
+		Short: "run command with a in-memory network",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
+			return runTestPlanet(&flags, args)
+		},
+	}
+
+	rootCmd.AddCommand(
+		networkCmd,
+		testCmd,
+	)
+
+	err := rootCmd.Execute()
+	if err != nil {
+		os.Exit(1)
+	}
 }
 
 func runProcesses(flags *Flags, args []string, command string) error {
