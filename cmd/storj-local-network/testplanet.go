@@ -32,6 +32,8 @@ func runTestPlanet(flags *Flags, args []string) error {
 	time.Sleep(time.Second * 2)
 
 	var env = os.Environ()
+
+	// add satellites to environment
 	for i, satellite := range planet.Satellites {
 		env = append(env,
 			fmt.Sprintf("SATELLITE%d_ID=%v", i, satellite.ID().String()),
@@ -39,6 +41,7 @@ func runTestPlanet(flags *Flags, args []string) error {
 		)
 	}
 
+	// add storage nodes to environment
 	for i, storage := range planet.StorageNodes {
 		env = append(env,
 			fmt.Sprintf("STORAGE%d_ID=%v", i, storage.ID().String()),
@@ -46,6 +49,7 @@ func runTestPlanet(flags *Flags, args []string) error {
 		)
 	}
 
+	// add additional identities to the environment
 	for i := 0; i < flags.Identities; i++ {
 		identity, err := planet.NewIdentity()
 		if err != nil {
