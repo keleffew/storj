@@ -81,7 +81,7 @@ type Config struct {
 	Client   ClientConfig
 	RS       RSConfig
 	Enc      EncryptionConfig
-  Node     NodeSelectionConfig
+	Node     NodeSelectionConfig
 }
 
 // Run starts a Minio Gateway given proper config
@@ -175,7 +175,7 @@ func (c Config) init(ctx context.Context, identity *provider.FullIdentity) (buck
 		return nil, nil, nil, nil, nil, err
 	}
 
-	segments := segments.NewSegmentStore(oc, ec, pdb, rs, c.MaxInlineSize, c.Node.AuditCount,
+	segments := segments.NewSegmentStore(oc, ec, pdb, rs, c.Client.MaxInlineSize, c.Node.AuditCount,
 		c.Node.AuditSuccess, c.Node.Uptime, c.Node.UptimeCount)
 
 	if c.RS.ErasureShareSize*c.RS.MinThreshold%c.Enc.BlockSize != 0 {
